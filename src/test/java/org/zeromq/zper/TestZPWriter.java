@@ -4,8 +4,8 @@ import static org.junit.Assert.*;
 
 import java.util.Properties;
 
-import org.jeromq.ZLog;
-import org.jeromq.ZLogManager;
+import org.zeromq.zper.base.ZLog;
+import org.zeromq.zper.base.ZLogManager;
 import org.jeromq.ZMQ;
 import org.jeromq.ZMQ.Context;
 import org.jeromq.ZMQ.Socket;
@@ -13,9 +13,9 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class TestZPFront
+public class TestZPWriter
 {
-    private static ZPFront server;
+    private static ZPWriter server;
     private static String bind = "tcp://*:5555";
     private static String topic = "test";
 
@@ -26,7 +26,7 @@ public class TestZPFront
         conf.setProperty ("front.bind", bind);
         conf.setProperty ("base_dir", "/tmp/zlogs/");
         
-        server = new ZPFront (conf);
+        server = new ZPWriter (conf);
         server.start();
         
     }
@@ -47,7 +47,7 @@ public class TestZPFront
         
         System.out.println("previous offset " + zlog.path ().getAbsolutePath () + ":" + offset);
 
-        sock.setIdentity (ZPUtils.genTopicIdentity (topic));
+        sock.setIdentity (ZPUtils.genTopicIdentity (topic, 0));
         sock.setLinger (100);
 
         boolean ret = sock.connect ("tcp://127.0.0.1:5555");
@@ -77,7 +77,7 @@ public class TestZPFront
         
         System.out.println("previous offset " + zlog.path ().getAbsolutePath () + ":" + offset);
 
-        sock.setIdentity (ZPUtils.genTopicIdentity (topic));
+        sock.setIdentity (ZPUtils.genTopicIdentity (topic, 0));
         sock.setLinger (100);
 
         boolean ret = sock.connect ("tcp://127.0.0.1:5555");

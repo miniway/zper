@@ -37,6 +37,10 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
+import org.zeromq.zper.base.ZLog;
+import org.zeromq.zper.base.ZLog.SegmentInfo;
+import org.zeromq.zper.base.ZLogManager;
+import org.zeromq.zper.base.ZLogManager.ZLogConfig;
 
 public class ZPUtils
 {
@@ -46,30 +50,27 @@ public class ZPUtils
         Properties conf = new Properties ();
 
         Options options = new Options ();
-        options.addOption ("c", true, "Load initial config from cmdline arg");
         options.addOption ("h", false, "Print help information");
         try {
             CommandLineParser parser = new PosixParser ();
             cmd = parser.parse (options, args);
         } catch (ParseException e) {
-            help (serverCls.getName (), options);
+            help ("java " + serverCls.getName () + " config_file", options);
             return;
         }
 
-        if (cmd != null && cmd.hasOption ("h")) {
-            help (serverCls.getName (), options);
+        if (args.length < 1 || (cmd != null && cmd.hasOption ("h"))) {
+            help ("java " + serverCls.getName () + " config_file", options);
             return;
         }
         
-        if (cmd != null && cmd.hasOption ("c")) {
-            try {
-                BufferedReader reader = 
-                        new BufferedReader (new FileReader (cmd.getOptionValue ("c")));
-                conf.load(reader);
-            } catch (IOException e) {
-                e.printStackTrace ();
-                System.exit (1);
-            }
+        try {
+            BufferedReader reader = 
+                    new BufferedReader (new FileReader (args [0]));
+            conf.load(reader);
+        } catch (IOException e) {
+            e.printStackTrace ();
+            System.exit (1);
         }
         
         try {
@@ -79,7 +80,8 @@ public class ZPUtils
 
                 @Override
                 public void run () {
-                  server.shutdown ();
+                    System.out.println ("Shutting Down");
+                    server.shutdown ();
                 }
 
               });
@@ -92,19 +94,20 @@ public class ZPUtils
     }
     
     
-    private static void help (String name, Options options) 
+    public static void help (String name, Options options) 
     {
         HelpFormatter fmt = new HelpFormatter ();
-          fmt.printHelp (name, options, true);
+        fmt.printHelp (name, options, true);
     }
 
-    public static byte [] genTopicIdentity (String topic) 
+    public synchronized static byte [] genTopicIdentity (String topic, int flag) 
     {
-        byte [] identity = new byte [1 + 1 + topic.length () + 16];
+        byte [] identity = new byte [1 + 2 + topic.length () + 16];
         ByteBuffer buf = ByteBuffer.wrap (identity);
         UUID uuid = UUID.randomUUID ();
         
         buf.put ((byte) topic.hashCode ());
+        buf.put ((byte) flag);
         buf.put ((byte) topic.length ());
         buf.put (topic.getBytes ());
         buf.putLong (uuid.getMostSignificantBits ());
@@ -113,4 +116,28 @@ public class ZPUtils
         return identity;
     }
 
+    public static void main (String [] argv) throws Exception
+    {
+        String cmd = argv [0];
+        
+        if (cmd.equals ("count"))
+            countMsg (argv);
+    }
+    
+    private static void countMsg (String [] argv) throws Exception
+    {
+        ZLogConfig zc = ZLogManager.instance ().config ();
+        zc.set ("base_dir", argv [1]);
+        
+        ZLog log = ZLogManager.instance ().get (argv [2]);
+        SegmentInfo [] segments = log.segments ();
+        long total = 0;
+        
+        for (SegmentInfo seg: segments) {
+            int count = log.countMsg (seg.start (), seg.offset () - seg.start ());
+            System.out.println (String.format ("%020d : %d", seg.start (), count));
+            total += count;
+        }
+        System.out.println ("Total : " + total);
+    }
 }

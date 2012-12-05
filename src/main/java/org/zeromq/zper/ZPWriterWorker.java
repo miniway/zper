@@ -25,9 +25,10 @@
 package org.zeromq.zper;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
-import org.jeromq.ZLog;
-import org.jeromq.ZLogManager;
+import org.zeromq.zper.base.ZLog;
+import org.zeromq.zper.base.ZLogManager;
 import org.jeromq.ZMQ;
 import org.jeromq.ZMQ.Context;
 import org.jeromq.ZMQ.Msg;
@@ -36,14 +37,15 @@ import org.jeromq.ZMQException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ZPFrontWorker extends Thread
+public class ZPWriterWorker extends Thread
 {
-    private static final Logger LOG = LoggerFactory.getLogger (ZPFrontWorker.class);
+    private static final Logger LOG = LoggerFactory.getLogger (ZPWriterWorker.class);
     
     // states
     private static final int START = 0;
-    private static final int TOPIC_RECEIVED = 1;
-    private static final int MESSAGE_BEGINS = 2;
+    private static final int TOPIC = 1;
+    private static final int COUNT = 2;
+    private static final int MESSAGE = 3;
     
     private final Context context ;
     private final String bindAddr;
@@ -51,8 +53,7 @@ public class ZPFrontWorker extends Thread
     private final ZLogManager logMgr;
     private Socket worker ;
 
-    public ZPFrontWorker (Context context, 
-            String bindAddr, String identity, int cacheSize)
+    public ZPWriterWorker (Context context, String bindAddr, String identity)
     {
         this.context = context;
         this.bindAddr = bindAddr;
@@ -66,6 +67,7 @@ public class ZPFrontWorker extends Thread
     {
         LOG.info ("Started Worker " + identity);
         worker = context.socket (ZMQ.DEALER);
+        worker.setRcvHWM (2000);
         worker.setIdentity (identity);
         worker.connect (bindAddr);
         try {
@@ -80,7 +82,8 @@ public class ZPFrontWorker extends Thread
     public void loop() {
 
         int state = START;
-
+        int flag = 0;
+        int count = 0;
         String topic = null;
         boolean more = false;
         boolean stop = false;
@@ -100,36 +103,42 @@ public class ZPFrontWorker extends Thread
                 byte [] id = msg.data ();
                 if (id == null)
                     break;
-                int tsize = id [1];
-                topic = new String (id, 2, tsize);
-                state = TOPIC_RECEIVED;
+                flag = id [1];
+                int tsize = id [2];
+                topic = new String (id, 3, tsize);
+                state = TOPIC;
                 zlog = logMgr.get (topic);
-                LOG.debug ("topic : " + topic);
                 break;
 
-            case TOPIC_RECEIVED:
+            case TOPIC:
 
                 if (msg.size () == 0 && more) { // bottom
-                    state = MESSAGE_BEGINS;
+                    state = COUNT;
                     break;
                 } 
-
-            case MESSAGE_BEGINS:
+            case COUNT:
+                count = ByteBuffer.wrap (msg.data ()).getInt ();
+                state = MESSAGE;
                 
-                if (!store (zlog, msg)) {
+                break;
+
+            case MESSAGE:
+                
+                if (!store (zlog, count, msg)) {
                     stop = true;
                 }
                 if (!more)
                     state = START;
                 break;
             }
+            msg = null;
         }
     }
 
-    private boolean store (ZLog zlog, Msg msg)
+    private boolean store (ZLog zlog, int count, Msg msg)
     {
         try {
-            zlog.append (msg);
+            zlog.appendBulk (count, msg);
             return true;
         } catch (IOException e) {
             e.printStackTrace();
