@@ -23,7 +23,6 @@ import java.io.FileInputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
@@ -56,13 +55,14 @@ public class ZLog {
     private long pendingMessages;
     private long capacity;
     private long lastFlush;
+    private boolean flushed;
 
     private final TreeMap<Long, Segment> segments ;
     private Segment current;
     private static final Pattern pattern = Pattern.compile("\\d{20}\\" + SUFFIX);
 
-    private static final long LATEST = -1L;
-    private static final long EARLIEST = -2L;
+    public static final long LATEST = -1L;
+    public static final long EARLIEST = -2L;
     
     public ZLog(ZLogManager.ZLogConfig conf, String topic) {
 
@@ -73,9 +73,7 @@ public class ZLog {
         reset();
         if (conf.recover)
             recover();
-
-        capacity = conf.segment_size - current.size ();
-        
+        flushed = false;
     }
     
     protected void reset () 
@@ -121,6 +119,7 @@ public class ZLog {
             segments.put (0L, current);
         }
 
+        capacity = conf.segment_size - current.size ();
     }
 
     public File path() {
@@ -171,7 +170,7 @@ public class ZLog {
     /**
      * For -1, it always returns start and last safely flushed offset
      * 
-     * @param modifiedBefore timestamp in milli. -2 for first, -1 for latest 
+     * @param modifiedBefore timestamp in millis. -2 for first, -1 for latest 
      * @param maxEntry maximum entries 
      * @return array of segment start offsets which where modified since
      */
@@ -227,7 +226,7 @@ public class ZLog {
             i++;
         }
         if (top == values.length)
-            offsets[offsets.length-1] = current.size();
+            offsets[offsets.length-1] = current.offset();
         return offsets;
     }
     
@@ -268,8 +267,8 @@ public class ZLog {
      */
     public long append (Msg msg) throws IOException 
     {
-        byte [] header = getMsgHeader (msg);
-        long size = msg.size() + header.length;
+        ByteBuffer header = getMsgHeader (msg);
+        long size = msg.size() + header.capacity ();
         
         capacity -= size;
         if (capacity < 0) {
@@ -277,42 +276,30 @@ public class ZLog {
             capacity -= size;
         }
 
-        MappedByteBuffer buf = current.getBuffer (true);
         pendingMessages++;
         
-        buf.put (header);
-        buf.put (msg.buf());
-        
-        /*
-        long size = current.write (msg.headerBuf (), msg.buf ());
-        pendingMessages++;
-        
-        capacity -= size;
-        if (capacity < 0) {
-            rotate ();
-        }
-        */
+        current.writes (header, msg.buf ());
         
         tryFlush();
         return current.offset();
     }
     
-    private byte [] getMsgHeader (Msg msg)
+    private ByteBuffer getMsgHeader (Msg msg)
     {
         int size = msg.size ();
         int flags = msg.getFlags ();
-        byte [] header;
+        ByteBuffer header;
         if (size < 255) {
-            header = new byte [2];
-            header [0] = (byte) ((flags & Msg.MORE) > 0 ? 0x01 : 0x00)  ;
-            header [1] = (byte) size;
+            header = ByteBuffer.allocate (2);
+            header.put ((byte) ((flags & Msg.MORE) > 0 ? 0x01 : 0x00));
+            header.put ((byte) size);
         } else {
-            header = new byte [9];
-            ByteBuffer hbuf = ByteBuffer.wrap (header);
+            header = ByteBuffer.allocate (9);
 
-            hbuf.put ((byte) ((flags & Msg.MORE) > 0 ? 0x03 : 0x02));
-            hbuf.putLong ((long) size);
+            header.put ((byte) ((flags & Msg.MORE) > 0 ? 0x03 : 0x02));
+            header.putLong ((long) size);
         }
+        header.flip ();
         return header;
     }
     
@@ -339,9 +326,12 @@ public class ZLog {
         }
         buf = entry.getValue ().getBuffer (false);
         buf.position ((int) (start - entry.getKey ()));
+        
+        MsgIterator it = new MsgIterator (buf);
 
-        while ((msg = readMsg (buf)) != null) {
-            if (msg.size () < 0)
+        while (it.hasNext ()) {
+            msg = it.next ();
+            if (msg == null)
                 break;
             max = max - msg.size ();
             if (max <= 0)
@@ -366,8 +356,11 @@ public class ZLog {
         buf = entry.getValue ().getBuffer (false);
         buf.position ((int) (start - entry.getKey ()));
 
-        while ((msg = readMsg (buf)) != null) {
-            if (msg.size () < 0)
+        MsgIterator it = new MsgIterator (buf);
+        
+        while (it.hasNext ()) {
+            msg = it.next ();
+            if (msg == null)
                 break;
             max = max - msg.size ();
             if (max <= 0)
@@ -406,7 +399,8 @@ public class ZLog {
      * @param start absolute file offset
      * @return SegmentInfo
      */
-    public SegmentInfo segmentInfo (long offset) {
+    public SegmentInfo segmentInfo (long offset) 
+    {
         Map.Entry<Long, Segment> entry = segments.floorEntry (offset);
         if (entry == null)
             return null;
@@ -438,21 +432,28 @@ public class ZLog {
     }
     
     private void tryFlush() {
-        boolean flush = false;
+        flushed = false;
         if (pendingMessages >= conf.flush_messages) {
-            flush = true;
+            flushed = true;
         }
-        if (!flush && System.currentTimeMillis() - lastFlush >= conf.flush_interval) {
-            flush = true;
+        if (!flushed && System.currentTimeMillis() - lastFlush >= conf.flush_interval) {
+            flushed = true;
         }
 
-        if (flush)
+        if (flushed)
             flush();
+    }
+    
+
+    public boolean flushed ()
+    {
+        return flushed;
     }
     
     private void recover() {
         try {
             current.recover();
+            capacity = conf.segment_size - current.size ();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -581,7 +582,14 @@ public class ZLog {
             
         }
 
-        protected long write (ByteBuffer buffers) throws IOException
+        protected long write (ByteBuffer buffer) throws IOException
+        {
+            long written = getChannel (true).write (buffer);
+            size += written;
+            return written;
+        }
+        
+        protected long writes (ByteBuffer ... buffers) throws IOException
         {
             long written = getChannel (true).write (buffers);
             size += written;
@@ -589,9 +597,6 @@ public class ZLog {
         }
 
         protected final long offset() {
-            if (buffer != null)
-                return start + buffer.position ();
-            
             return start + size;
         }
         
@@ -601,7 +606,7 @@ public class ZLog {
         
         
         protected final long start() {
-            return size;
+            return start;
         }
         
         protected void flush() {
@@ -631,17 +636,12 @@ public class ZLog {
             try {
                 MappedByteBuffer buf = ch.map (MapMode.READ_ONLY, 0, ch.size ());
                 int pos = 0;
-                while (true) {
-                    pos = buf.position ();
-                    try {
-                        Msg msg = readMsg (buf);
-                        if (msg == null)
-                            break;
-                        
-                    } catch (InvalidOffsetException e) {
-                        // block corrupted
+                MsgIterator it = new MsgIterator (buf);
+                while (it.hasNext ()) {
+                    Msg msg = it.next ();
+                    if (msg == null)
                         break;
-                    }
+                    pos = buf.position ();
                 }
 
                 if (pos < ch.size ()) {
@@ -694,55 +694,6 @@ public class ZLog {
             super();
         }
         
-    }
-
-    private static Msg readMsg (ByteBuffer buf) throws InvalidOffsetException {
-        
-        if (buf.remaining() < 2)
-            return null;
-        
-        int length;
-        long longLength;
-        byte flag;
-        Msg msg = null;
-        
-        try {
-            flag = buf.get();
-            if (flag > 3)
-                throw new InvalidOffsetException();
-            
-            if ((flag & 0x02) == 0) {   //  Short length  
-                length = buf.get ();
-                if (length < 0)
-                    length = (0xFF) & length;
-            } else {                    //  Long length
-                longLength = buf.getLong();
-                if (longLength < 255 || longLength > Integer.MAX_VALUE)
-                    throw new InvalidOffsetException();
-                length = (int) longLength;
-            }
-            
-            if (length == 0 && flag == 0)
-                return null;
-            
-            if (length > buf.remaining())
-                throw new InvalidOffsetException();
-
-            msg = new Msg (length);
-            if ((flag & Msg.MORE) > 0)
-                msg.setFlags (Msg.MORE);
-
-            if (length > 0)
-                buf.get (msg.data ());
-            
-        } catch (BufferUnderflowException e) {
-            // block corrupted
-            throw new InvalidOffsetException(e);
-        } catch (IllegalArgumentException e) {
-            throw new InvalidOffsetException(e);
-        }
-        
-        return msg;
     }
 
 }

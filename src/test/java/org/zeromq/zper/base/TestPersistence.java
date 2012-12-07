@@ -17,6 +17,8 @@ import org.zeromq.zper.base.Persistence;
 
 public class TestPersistence
 {
+    private static final byte STATUS_OK = 100;
+
     @Test
     public void testError ()  throws Exception {
         
@@ -56,10 +58,10 @@ public class TestPersistence
         Thread.sleep (1000);
         router.sendMore ("A");
         router.sendMore (new byte [] {Persistence.MESSAGE_RESPONSE});
-        router.sendMore (new byte [] {Persistence.STATUS_OK});
+        router.sendMore (new byte [] {STATUS_OK});
         router.send (ByteBuffer.wrap (new byte [8]).putLong (100).array ());
         
-        assertEquals (dealer.recv ()[0], Persistence.STATUS_OK);
+        assertEquals (dealer.recv ()[0], STATUS_OK);
         assertEquals (dealer.recv ().length, 8);
 
         dealer.close ();
@@ -103,12 +105,12 @@ public class TestPersistence
         Thread.sleep (1000);
         router.sendMore ("A");
         router.sendMore (new byte [] {Persistence.MESSAGE_FILE});
-        router.sendMore (new byte [] {Persistence.STATUS_OK});
+        router.sendMore (new byte [] {STATUS_OK});
         router.sendMore (path);
         router.sendMore (ByteBuffer.wrap (new byte [8]).putLong (0).array ());
         router.send (ByteBuffer.wrap (new byte [8]).putLong (329).array ());
         
-        assertEquals (dealer.recv ()[0], Persistence.STATUS_OK);
+        assertEquals (dealer.recv ()[0], STATUS_OK);
         ByteBuffer content = ByteBuffer.wrap (dealer.recv ());
 
         assertEquals (content.limit (), 329);

@@ -6,14 +6,20 @@ ZPER is ZeroMQ persistence broker. ZPER store ZMQ message frames to disk as is.
 ## Design
 Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
 
-* Easier to use for 0MQ users
-* 2x faster than Kafka
+* Easier to use for 0MQ developer
+* 2x faster than Kafka at Producer (1.5x faster at Consumer)
+* No ZooKeepr dependency 
 
 ### ZPWriter
 * Listen on the ROUTER socket
 * Handle write requests
 * Multiplex worker thread based on the topic hash
-* Support replica to another ZPWriter
+* Support replica to another ZPWriter (at 0.2)
+
+### ZPReader
+* Listen on the ROUTER socket
+* Handle fetch requests
+* Handle operation requests
 
 ### ZPAck
 * Listen on the PUB socket for public
@@ -23,40 +29,46 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
 * Listen on the inproc PULL socket for ack input from the ZPWriter
 * Keep basic stats
 
-### ZPReader
-* Quorum between ZPReaders 
-* Listen on the ROUTER socket
-* Handle fetch requests
-* Handle operation requests
+### ZPController (at 0.2)
+* When ZPER works as a cluster, ZPER coordinates through ZPController
+* Listen on the ROUTER socket 
+* ZPController connects each other and shares informaion
+* Client can get cluster information 
+* Keep basic stats
 
 ## Configuration
 
     # common configuration
+    io_threads = 2                  # number of io threads
     base_dir = "/data/zper"         # data store base directory 
     segment_size = 536870912        # segment file size 512M
     flush_messages = 10000          # flush every N messages
     flush_interval = 1000           # flush every N milliseconds
-    cleanup_interval = 604800000L   # cleanup segements older than 1 week
+    retain_hours = 168              # cleanup segements older than 1 week
 
     # writer configuration
     writer.bind = tcp://*:5555       # writer bind address
     writer.workers = 3               # number of worker threads
-    writer.io_threads = 1            # number of io threads
     writer.replica.1 = tcp://addr1:port  # target replica 1's address
     writer.replica.2 = tcp://addr2:port  # target replica 2's address
 
     # reader configuration
     reader.bind = tcp://*:5556        # reader bind address
     reader.workers = 3                # number of worker threads
-    reader.io_threads = 1             # number of io threads
 
     # ack configuration
     ack.bind = tcp://*:5557
+
+    # controller configuration (at 0.2)
+    controller.bind = tcp://*:5558
+    controller.quorum.1 = tcp://addr1:port   # target quorum 1's address
+    controller.quorum.2 = tcp://addr2:port   # target quorum 2's address
 
 ## Write messages to ZPER
 * Create a DEALER, REQ or PUSH socket and set proper HWM 
 * Set a identity as the following format (ZMQ 3.2.2 or above is required for PUSH)
 
+<pre>
      + ----------------- + ----------- + ------------------- + ----- + ------------- +
      | 1 byte-topic-hash | 1 byte-flag | 1 byte-topic-length | topic | 16 bytes uuid |
      + ----------------- + ----------- + ------------------- + ----- + ------------- +
@@ -68,6 +80,23 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
      0 (Fastest) : No response (DEALER and PUSH)
      1           : Response at flush (DEALER)
      2 (Slowest) : Response at every write (REQ)
+</pre>
+
+```java
+    Context ctx = ZMQ.context (1);
+    Socket sock = ctx.socket (ZMQ.DEALER);
+    
+    sock.setIdentity (ZPUtils.genTopicIdentity (topic, 0));  // flag = 0
+    sock.connect ("tcp://127.0.0.1:5555");
+
+    while (true) {
+        String data = "hello";
+        sock.send (data);
+    }
+
+    sock.close ();
+    ctx.term ();
+```
 
 * Connect to ZPWriter and send (socket.write) messages
 * Recommend to send multi frames with the first frame as a message id which will be used at the ZPAck
@@ -79,9 +108,10 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
 * Connect to ZPReader
 * Send a request (socket.write) and fetch (socket.read) messages
 
+<pre>
     # command consists of 1 command frame and variable argument frames 
      + ----------+
-     | command   |       # 1 byte
+     | command   |       # command String
      + ----------+
      | argument1 |       # variable bytes depends on command
      + ----------+
@@ -91,9 +121,8 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
      + ----------+
 
     # commands
-    1 : fetch ( 8_bytes_offset , 8_bytes_max_bytes )
-    2 : offset ( 8_bytes_last_modified_millis )  # -1 : oldest , -2 : latest
-    3 : master 
+    FETCH ( 8_bytes_offset , 8_bytes_max_bytes )
+    OFFSET ( 8_bytes_last_modified_millis [, 4_bytes_max_entries ] )  # -1 : oldest , -2 : latest
 
     # responses
      + ----------+
@@ -121,12 +150,7 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
      | offsetN   |       
      + ----------+
 
-    for master request
-     + -------------------------+
-     | master ZPWriter address  |       
-     + -------------------------+
-     | master ZPReader address  |       
-     + -------------------------+
+</pre>
 
 ## Listen acks from ZPER
 * Create a SUB socket
@@ -134,6 +158,7 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
 * Connect to ZPAck
 * ZPAck will send you 3 frames every time ZPWriter flush to disks
 
+<pre>
     # ack consists of 3 frames
      + -----------+
      | topic      |    # topic string
@@ -142,6 +167,7 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
      + -----------+
      | offset     |    # 8 bytes offset of the message
      + -----------+
+</pre>
 
-## Working on quorum
-* When works on a cluster, send 'master' command to one of ZPReader(s) then work with the master ZPWriter and ZPReader
+## Working on Cluster (at 0.2)
+* By connecting to one of ZPController, client can get node and peer information

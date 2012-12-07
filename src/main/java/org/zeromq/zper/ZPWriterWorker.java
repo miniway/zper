@@ -27,13 +27,15 @@ package org.zeromq.zper;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+import org.zeromq.zper.base.MsgIterator;
 import org.zeromq.zper.base.ZLog;
 import org.zeromq.zper.base.ZLogManager;
+import org.jeromq.ZContext;
 import org.jeromq.ZMQ;
-import org.jeromq.ZMQ.Context;
 import org.jeromq.ZMQ.Msg;
 import org.jeromq.ZMQ.Socket;
 import org.jeromq.ZMQException;
+import org.jeromq.ZMsg;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,15 +49,15 @@ public class ZPWriterWorker extends Thread
     private static final int COUNT = 2;
     private static final int MESSAGE = 3;
     
-    private final Context context ;
+    private final ZContext context ;
     private final String bindAddr;
     private final String identity;
     private final ZLogManager logMgr;
     private Socket worker ;
 
-    public ZPWriterWorker (Context context, String bindAddr, String identity)
+    public ZPWriterWorker (ZContext context, String bindAddr, String identity)
     {
-        this.context = context;
+        this.context = ZContext.shadow (context);
         this.bindAddr = bindAddr;
         this.identity = identity;
 
@@ -66,7 +68,7 @@ public class ZPWriterWorker extends Thread
     public void run ()
     {
         LOG.info ("Started Worker " + identity);
-        worker = context.socket (ZMQ.DEALER);
+        worker = context.createSocket (ZMQ.DEALER);
         worker.setRcvHWM (2000);
         worker.setIdentity (identity);
         worker.connect (bindAddr);
@@ -75,8 +77,8 @@ public class ZPWriterWorker extends Thread
         } catch (ZMQException.CtxTerminated e) {
         }
 
-        LOG.info("Ended Worker " + identity);
-        worker.close();
+        LOG.info("Ended Writer Worker " + identity);
+        context.destroy ();
     }
     
     public void loop() {
@@ -89,6 +91,7 @@ public class ZPWriterWorker extends Thread
         boolean stop = false;
         ZLog zlog = null;
         Msg msg;
+        ZMsg response = null;
 
         while (!Thread.currentThread ().isInterrupted ()
                 && !stop) {
@@ -96,7 +99,7 @@ public class ZPWriterWorker extends Thread
             msg = worker.recvMsg (0);
             if (msg == null)
                 break;
-            more = worker.hasReceiveMore ();
+            more = msg.hasMore ();
 
             switch (state) {
             case START:
@@ -104,18 +107,26 @@ public class ZPWriterWorker extends Thread
                 if (id == null)
                     break;
                 flag = id [1];
-                int tsize = id [2];
-                topic = new String (id, 3, tsize);
+                topic = ZPUtils.getTopic (id);
                 state = TOPIC;
                 zlog = logMgr.get (topic);
+                
+                if (flag > 0) {
+                    response = new ZMsg ();
+                    response.add (id);
+                }                
                 break;
 
             case TOPIC:
 
                 if (msg.size () == 0 && more) { // bottom
                     state = COUNT;
+                    
+                    if (flag > 0)
+                        response.add (msg.data ());
                     break;
-                } 
+                }
+                
             case COUNT:
                 count = ByteBuffer.wrap (msg.data ()).getInt ();
                 state = MESSAGE;
@@ -124,15 +135,27 @@ public class ZPWriterWorker extends Thread
 
             case MESSAGE:
                 
-                if (!store (zlog, count, msg)) {
+                if (store (zlog, count, msg)) {
+                    if (flag > 0 && zlog.flushed ()) {
+                        response.add (getLastFrame (msg.buf ().duplicate ()));
+                        response.send (worker);
+                    }
+                } else 
                     stop = true;
-                }
                 if (!more)
                     state = START;
                 break;
             }
             msg = null;
         }
+    }
+
+    private byte [] getLastFrame (ByteBuffer buf)
+    {
+        buf.rewind ();
+        MsgIterator it = new MsgIterator (buf);
+        it.hasNext ();
+        return it.next ().data ();
     }
 
     private boolean store (ZLog zlog, int count, Msg msg)

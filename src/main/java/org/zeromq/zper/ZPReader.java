@@ -9,25 +9,27 @@ import org.zeromq.zper.base.ZLogManager;
 import org.jeromq.ZMQ;
 import org.zeromq.zper.base.Persistence.PersistEncoder;
 import org.zeromq.zper.base.ZLogManager.ZLogConfig;
-import org.jeromq.ZMQ.Context;
+import org.jeromq.ZContext;
 import org.jeromq.ZMQ.Socket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ZPReader extends ZPServer
+public class ZPReader extends Thread
 {
     static final Logger LOG = LoggerFactory.getLogger(ZPReader.class);
     
-    private final Context context;
-    private final int numIOs;
+    private final ZContext context;
     private final int numWorkers;
     private final String bind;
+    private final int sendBufferSize;
     
     private final List <byte []> workers;
     
-    public ZPReader (Properties conf)
+    public ZPReader (ZContext context, Properties conf)
     {
-        numIOs = Integer.parseInt (conf.getProperty ("reader.io_threads", "1"));
+        this.context = ZContext.shadow (context);
+        
+        sendBufferSize = Integer.parseInt (conf.getProperty ("send_buffer", "1048576"));
         numWorkers = Integer.parseInt (conf.getProperty ("reader.workers", "5"));
         bind = conf.getProperty ("reader.bind", "tcp://*:5556");
 
@@ -37,18 +39,18 @@ public class ZPReader extends ZPServer
         LOG.info("Data is stored at " + zc.get("base_dir"));
 
         workers = new ArrayList <byte []> ();
-        context = ZMQ.context(numIOs);
         
     }
     
     @Override
     public void run ()
     {
-        String workerBind = "inproc://worker";
+        String workerBind = "inproc://reader-worker";
 
-        Socket router = context.socket (ZMQ.ROUTER);
-        Socket inrouter = context.socket (ZMQ.ROUTER);
+        Socket router = context.createSocket (ZMQ.ROUTER);
+        Socket inrouter = context.createSocket (ZMQ.ROUTER);
 
+        router.setSendBufferSize (sendBufferSize);
         router.setEncoder (PersistEncoder.class);
         
         inrouter.bind (workerBind);
@@ -62,30 +64,14 @@ public class ZPReader extends ZPServer
 
         router.bind (bind);
 
-        LOG.info ("Rear Server Started on " + bind);
+        LOG.info ("Reader bind on " + bind);
         
         ZDevice.loadBalanceDevice (router, inrouter, workers);
         
-        LOG.info ("Front Ended");
         ZLogManager.instance ().shutdown ();
-        router.close ();
-        inrouter.close ();
+        
+        context.destroy ();
+        LOG.info ("Reader Front Ended");
     }
     
-    @Override
-    public void shutdown ()
-    {
-        context.term ();
-    }
-
-    public static void main(String[] argv) {
-        try {
-            ZPUtils.setup(argv, ZPReader.class);
-        } catch (Exception e) {
-            LOG.error(
-              "Aborting: Unexpected problem with environment." + e.getMessage(), e);
-            System.exit(-1);
-        }
-    }
-
 }

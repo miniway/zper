@@ -28,6 +28,7 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Iterator;
 import java.util.Properties;
 import java.util.UUID;
 
@@ -37,6 +38,8 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
+import org.jeromq.ZMQ.Msg;
+import org.zeromq.zper.base.MsgIterator;
 import org.zeromq.zper.base.ZLog;
 import org.zeromq.zper.base.ZLog.SegmentInfo;
 import org.zeromq.zper.base.ZLogManager;
@@ -44,7 +47,7 @@ import org.zeromq.zper.base.ZLogManager.ZLogConfig;
 
 public class ZPUtils
 {
-    public static void setup (String[] args, Class<? extends ZPServer> serverCls)
+    public static Properties setup (String[] args)
     {
         CommandLine cmd = null;
         Properties conf = new Properties ();
@@ -55,13 +58,13 @@ public class ZPUtils
             CommandLineParser parser = new PosixParser ();
             cmd = parser.parse (options, args);
         } catch (ParseException e) {
-            help ("java " + serverCls.getName () + " config_file", options);
-            return;
+            help ("java class config_file", options);
+            System.exit (-1);
         }
 
         if (args.length < 1 || (cmd != null && cmd.hasOption ("h"))) {
-            help ("java " + serverCls.getName () + " config_file", options);
-            return;
+            help ("java class config_file", options);
+            System.exit (-1);
         }
         
         try {
@@ -73,24 +76,8 @@ public class ZPUtils
             System.exit (1);
         }
         
-        try {
-            final ZPServer server = serverCls.getConstructor (conf.getClass ()).newInstance (conf);
-            
-            Runtime.getRuntime().addShutdownHook (new Thread ("shutdownHook") {
-
-                @Override
-                public void run () {
-                    System.out.println ("Shutting Down");
-                    server.shutdown ();
-                }
-
-              });
-
-            server.start ();
-
-        } catch (Exception e) {
-            e.printStackTrace ();
-        }
+        return conf;
+        
     }
     
     
@@ -100,7 +87,7 @@ public class ZPUtils
         fmt.printHelp (name, options, true);
     }
 
-    public synchronized static byte [] genTopicIdentity (String topic, int flag) 
+    synchronized public static byte [] genTopicIdentity (String topic, int flag) 
     {
         byte [] identity = new byte [1 + 2 + topic.length () + 16];
         ByteBuffer buf = ByteBuffer.wrap (identity);
@@ -114,6 +101,12 @@ public class ZPUtils
         buf.putLong (uuid.getLeastSignificantBits ());
         
         return identity;
+    }
+    
+    public static String getTopic (byte [] identity)
+    {
+        int tsize = identity [2];
+        return new String (identity, 3, tsize);
     }
 
     public static void main (String [] argv) throws Exception
@@ -139,5 +132,11 @@ public class ZPUtils
             total += count;
         }
         System.out.println ("Total : " + total);
+    }
+
+
+    public static Iterator <Msg> iterator (Msg msg)
+    {
+        return new MsgIterator (msg.buf ());
     }
 }

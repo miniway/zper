@@ -15,29 +15,30 @@ import org.junit.Test;
 
 public class TestZPWriter
 {
-    private static ZPWriter server;
+    private static ZPer server;
     private static String bind = "tcp://*:5555";
     private static String topic = "test";
 
     @BeforeClass
-    public static void start () throws Exception {
-        
+    public static void start () throws Exception 
+    {
         Properties conf = new Properties ();
         conf.setProperty ("front.bind", bind);
         conf.setProperty ("base_dir", "/tmp/zlogs/");
         
-        server = new ZPWriter (conf);
+        server = new ZPer (conf);
         server.start();
-        
     }
     
     @AfterClass
-    public static void tearDown () throws Exception {
+    public static void tearDown () throws Exception 
+    {
         server.shutdown ();
     }
     
     @Test
-    public void testSend () throws Exception {
+    public void testSend () throws Exception 
+    {
         Context ctx = ZMQ.context (1);
         Socket sock = ctx.socket (ZMQ.DEALER);
         

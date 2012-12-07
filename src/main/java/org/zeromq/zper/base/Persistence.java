@@ -20,10 +20,11 @@
 */
 package org.zeromq.zper.base;
 
+import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.concurrent.locks.LockSupport;
 
 import zmq.DecoderBase;
 import zmq.EncoderBase;
@@ -39,7 +40,6 @@ public class Persistence {
     public static final int MESSAGE_FILE = 2;
     public static final int MESSAGE_ERROR = 3;
     
-    public static final int STATUS_OK = 0;
     public static final int STATUS_INTERNAL_ERROR = -1;
     
     public static class PersistDecoder extends DecoderBase 
@@ -55,11 +55,12 @@ public class Persistence {
         private int msg_size;
         private int read_pos;
         private final int version;
-        private ByteBuffer buffer;
-        private ByteBuffer active;
-        private ByteBuffer standby;
-        private ByteBuffer threshold;
-        private ByteBuffer dummy;
+        private ByteBuffer buffer;              //  Current operating buffer
+        private ByteBuffer active;              //  Active buffer
+        private ByteBuffer standby;             //  Standby buffer
+        private ByteBuffer threshold;           
+        private ByteBuffer standby_threshold;
+        private ByteBuffer dummy;               //  Dummy buffer
         private boolean identity_received;
         private final int bufsize;
         private int start;
@@ -70,16 +71,20 @@ public class Persistence {
         {
             super (0);
 
-            bufsize = bufsize_ * 128;
             maxmsgsize = maxmsgsize_;
             version = version_;
             msg_sink = session;
             identity_received = false;
             
+            if (maxmsgsize_ < 0)
+                bufsize = bufsize_ * 10;
+            else
+                bufsize = (int) maxmsgsize_;
+            
             active = ByteBuffer.allocateDirect (bufsize);
             standby = ByteBuffer.allocateDirect (bufsize);
             dummy = ByteBuffer.allocate (0);
-            threshold = null;
+            threshold = standby_threshold = null;
             start = end = count = 0;
             read_pos = 0;
             next_step (null, 1, flags_ready);
@@ -116,7 +121,8 @@ public class Persistence {
         {
             if (active.remaining () < to_read) {
                 
-                if (threshold.hasRemaining ()) {
+                if (threshold != null && threshold.hasRemaining ()) {
+                    LockSupport.parkNanos (1);
                     return dummy; // busy waiting
                 }
                 
@@ -130,6 +136,7 @@ public class Persistence {
                 ByteBuffer temp = active;
                 active = standby;
                 standby = temp;
+                threshold = standby_threshold;
             }
             buffer = active.slice ();
             read_pos = 0;
@@ -283,7 +290,7 @@ public class Persistence {
             
             start = end;
             count = 0;
-            threshold = msg.buf ();
+            standby_threshold = msg.buf ();
             return true;
         }
         
@@ -468,9 +475,6 @@ public class Persistence {
 
         private final void process_file () 
         {
-            if (status != STATUS_OK)
-                return;
-            
             // The second file frame is path
             boolean rc = require_msg ();
             assert (rc);
@@ -487,7 +491,7 @@ public class Persistence {
             channel_count = in_progress.buf ().getLong ();
 
             try {
-                channel =  new RandomAccessFile (path, "r").getChannel ();
+                channel = new FileInputStream(path).getChannel ();
             } catch (IOException e) {
                 e.printStackTrace();
                 status = STATUS_INTERNAL_ERROR;
@@ -497,8 +501,6 @@ public class Persistence {
         
         private final boolean encode_file () 
         {
-            assert (status == STATUS_OK);
-            
             channel_ready = true;
             return encode_size ((int) channel_count, false);
         }

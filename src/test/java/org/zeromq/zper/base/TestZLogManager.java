@@ -154,7 +154,7 @@ public class TestZLogManager
         
         FileChannel ch = log.open(10L);
         assertThat(log.offset(), is(22L));
-        assertThat(ch.size(), is(13L));
+        assertThat(ch.size(), is(12L));
         ch.close();
     }
 }

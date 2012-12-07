@@ -32,34 +32,34 @@ import org.jeromq.ZDevice;
 import org.zeromq.zper.base.ZLogManager;
 import org.zeromq.zper.base.Persistence.PersistDecoder;
 import org.zeromq.zper.base.ZLogManager.ZLogConfig;
+import org.jeromq.ZContext;
 import org.jeromq.ZMQ;
-import org.jeromq.ZMQ.Context;
 import org.jeromq.ZMQ.Socket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ZPWriter extends ZPServer
+public class ZPWriter extends Thread
 {
     static final Logger LOG = LoggerFactory.getLogger(ZPWriter.class);
 
-    private final Context context;
-    private final int numIOs;
+    private final ZContext context;
     private final int numWorkers;
     private final String bind;
     private final List <byte []> workers;
     
     // socket parameter
     private final int recvBufferSize;
-    private final int maxMessageSize;
+    private final long maxMessageSize;
     
-    public ZPWriter (Properties conf)
+    public ZPWriter (ZContext context, Properties conf)
     {
-        numIOs = Integer.parseInt (conf.getProperty ("writer.io_threads", "1"));
+        this.context = ZContext.shadow (context);
+        
         numWorkers = Integer.parseInt (conf.getProperty ("writer.workers", "5"));
         bind = conf.getProperty ("writer.bind", "tcp://*:5555");
 
         recvBufferSize = Integer.parseInt (conf.getProperty ("receive_buffer", "1048576"));
-        maxMessageSize = Integer.parseInt (conf.getProperty ("max_message", "1024000"));
+        maxMessageSize = Long.parseLong (conf.getProperty ("max_message", "10485760"));
         
         ZLogConfig zc = ZLogManager.instance ().config ();
         zc.set ("base_dir", conf.getProperty ("base_dir"));
@@ -72,17 +72,15 @@ public class ZPWriter extends ZPServer
         LOG.info("Data is stored at " + zc.get("base_dir"));
 
         workers = new ArrayList <byte[]> ();
-        context = ZMQ.context(numIOs);
-    
     }
     
     @Override
     public void run ()
     {
-        String workerBind = "inproc://worker";
+        String workerBind = "inproc://writer-worker";
 
-        Socket router = context.socket (ZMQ.ROUTER);
-        Socket inrouter = context.socket (ZMQ.ROUTER);
+        Socket router = context.createSocket (ZMQ.ROUTER);
+        Socket inrouter = context.createSocket (ZMQ.ROUTER);
         router.setReceiveBufferSize (recvBufferSize);
         router.setMaxMsgSize (maxMessageSize);
         
@@ -106,26 +104,9 @@ public class ZPWriter extends ZPServer
         
         LOG.info("Front Ended");
         ZLogManager.instance ().shutdown ();
-        router.close ();
-        inrouter.close ();
-        LOG.info("Front Closed");
-    }
+        
+        context.destroy ();
 
-    @Override
-    public void shutdown ()
-    {
-        context.term ();
-    }
-
-    public static void main (String [] argv) 
-    {
-        try {
-            ZPUtils.setup (argv, ZPWriter.class);
-        } catch (Exception e) {
-            LOG.error(
-              "Aborting: Unexpected problem with environment." + e.getMessage(), e);
-            System.exit(-1);
-        }
     }
 
 }
