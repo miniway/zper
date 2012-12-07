@@ -1,4 +1,7 @@
-/*
+/*  =========================================================================
+    Persistence - ZPER Persistence Encoder / Decoder 
+
+    -------------------------------------------------------------------------
     Copyright (c) 2012 InfiniLoop Corporation
     Copyright other contributors as noted in the AUTHORS file.
 
@@ -17,6 +20,7 @@
     You should have received a copy of the GNU Lesser General Public
     License along with this program. If not, see
     <http://www.gnu.org/licenses/>.
+    =========================================================================
 */
 package org.zeromq.zper.base;
 

@@ -1,5 +1,5 @@
 /*  =========================================================================
-    ZPFront - ZPER Writer application 
+    ZPWriter - ZPER Writer 
 
     -------------------------------------------------------------------------
     Copyright (c) 2012 InfiniLoop Corporation

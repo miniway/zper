@@ -1,5 +1,5 @@
 /*  =========================================================================
-    ZPFrontWorker - ZPER front worker 
+    ZPWriterWorker - ZPER writer worker 
 
     -------------------------------------------------------------------------
     Copyright (c) 2012 InfiniLoop Corporation
