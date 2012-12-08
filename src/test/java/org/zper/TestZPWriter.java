@@ -1,11 +1,11 @@
-package org.zeromq.zper;
+package org.zper;
 
 import static org.junit.Assert.*;
 
 import java.util.Properties;
 
-import org.zeromq.zper.base.ZLog;
-import org.zeromq.zper.base.ZLogManager;
+import org.zper.base.ZLog;
+import org.zper.base.ZLogManager;
 import org.jeromq.ZMQ;
 import org.jeromq.ZMQ.Context;
 import org.jeromq.ZMQ.Socket;

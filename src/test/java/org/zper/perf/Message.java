@@ -1,4 +1,4 @@
-package org.zeromq.zper.perf;
+package org.zper.perf;
 
 import java.nio.ByteBuffer;
 import java.util.zip.CRC32;

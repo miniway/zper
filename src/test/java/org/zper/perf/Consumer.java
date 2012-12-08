@@ -1,6 +1,5 @@
-package org.zeromq.zper.perf;
+package org.zper.perf;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -8,8 +7,8 @@ import org.jeromq.ZContext;
 import org.jeromq.ZMQ;
 import org.jeromq.ZMQ.Msg;
 import org.jeromq.ZMQ.Socket;
-import org.zeromq.zper.ZPUtils;
-import org.zeromq.zper.base.MsgIterator;
+import org.zper.MsgIterator;
+import org.zper.ZPUtils;
 
 public class Consumer
 {
@@ -29,8 +28,8 @@ public class Consumer
     public long[] getOffsetsBefore (String topic, int ts, int entry)
     {
         sock.sendMore ("OFFSET");
-        sock.sendMore (ByteBuffer.allocate (8).putLong (ts).array ());
-        sock.send (ByteBuffer.allocate (4).putInt (entry).array ());
+        sock.sendMore (ZPUtils.getBytes (ts));
+        sock.send (ZPUtils.getBytes (entry));
         
         sock.recv (); // status
         
@@ -38,7 +37,7 @@ public class Consumer
         int idx = 0;
         while (sock.hasReceiveMore ()) {
             if (idx < entry)
-                offsets [idx] = ((ByteBuffer)ByteBuffer.allocate (8).put (sock.recv ()).flip ()).getLong ();
+                offsets [idx] = ZPUtils.getLong (sock.recv ());
             idx ++;
         }
         
@@ -49,21 +48,19 @@ public class Consumer
     {
         
         sock.sendMore ("FETCH");
-        sock.sendMore (ByteBuffer.allocate (8).putLong (offset).array ());
-        sock.send (ByteBuffer.allocate (8).putLong (fetchSize).array ());
+        sock.sendMore (ZPUtils.getBytes (offset));
+        sock.send (ZPUtils.getBytes (fetchSize));
 
-        byte [] status = sock.recv (); // status
+        int status = ZPUtils.getInt (sock.recv ()); // status
         
         ArrayList <Message> result = new ArrayList <Message> ();
         
-        if (status[0] != 100) {
-            System.out.println ("no more");
+        if (status != 100) {
+            // no more data
             return result;
         }
-        ByteBuffer buf = ByteBuffer.wrap (sock.recv ());
 
-        MsgIterator it = new MsgIterator (buf);
-        
+        MsgIterator it = ZPUtils.iterator (sock.recvMsg ());
         
         while (it.hasNext ()) {
             Msg header = it.next ();

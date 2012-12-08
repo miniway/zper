@@ -16,7 +16,7 @@
     You should have received a copy of the GNU Lesser General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-package org.zeromq.zper.base;
+package org.zper.base;
 
 
 import java.io.File;

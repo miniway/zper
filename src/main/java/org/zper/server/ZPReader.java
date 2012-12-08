@@ -1,5 +1,5 @@
 /*  =========================================================================
-    ZPWriter - ZPER Writer 
+    ZPReader - ZPER Reader 
 
     -------------------------------------------------------------------------
     Copyright (c) 2012 InfiniLoop Corporation
@@ -22,91 +22,80 @@
     <http://www.gnu.org/licenses/>.
     =========================================================================
 */
-package org.zeromq.zper;
+package org.zper.server;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
 import org.jeromq.ZDevice;
-import org.zeromq.zper.base.ZLogManager;
-import org.zeromq.zper.base.Persistence.PersistDecoder;
-import org.zeromq.zper.base.ZLogManager.ZLogConfig;
-import org.jeromq.ZContext;
 import org.jeromq.ZMQ;
+import org.zper.base.ZLogManager;
+import org.zper.base.Persistence.PersistEncoder;
+import org.zper.base.ZLogManager.ZLogConfig;
+import org.jeromq.ZContext;
 import org.jeromq.ZMQ.Socket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ZPWriter extends Thread
+public class ZPReader extends Thread
 {
-    static final Logger LOG = LoggerFactory.getLogger(ZPWriter.class);
-
+    static final Logger LOG = LoggerFactory.getLogger(ZPReader.class);
+    
     private final ZContext context;
     private final int numWorkers;
     private final String bind;
+    private final int sendBufferSize;
+    
     private final List <byte []> workers;
     
-    // socket parameter
-    private final int recvBufferSize;
-    private final long maxMessageSize;
-    
-    public ZPWriter (ZContext context, Properties conf)
+    public ZPReader (ZContext context, Properties conf)
     {
         this.context = ZContext.shadow (context);
         
-        numWorkers = Integer.parseInt (conf.getProperty ("writer.workers", "5"));
-        bind = conf.getProperty ("writer.bind", "tcp://*:5555");
+        sendBufferSize = Integer.parseInt (conf.getProperty ("send_buffer", "1048576"));
+        numWorkers = Integer.parseInt (conf.getProperty ("reader.workers", "5"));
+        bind = conf.getProperty ("reader.bind", "tcp://*:5556");
 
-        recvBufferSize = Integer.parseInt (conf.getProperty ("receive_buffer", "1048576"));
-        maxMessageSize = Long.parseLong (conf.getProperty ("max_message", "10485760"));
-        
         ZLogConfig zc = ZLogManager.instance ().config ();
         zc.set ("base_dir", conf.getProperty ("base_dir"));
-        zc.set ("segment_size", Long.parseLong (conf.getProperty ("segment_size","536870912")));
-        zc.set ("flush_messages", Long.parseLong (conf.getProperty ("flush_messages","10000")));
-        zc.set ("flush_interval", Long.parseLong (conf.getProperty ("flush_interval","10000")));
-        zc.set ("retain_hours", Integer.parseInt (conf.getProperty ("retain_hours","168")));
-        zc.set ("recover", true);
-        
+
         LOG.info("Data is stored at " + zc.get("base_dir"));
 
-        workers = new ArrayList <byte[]> ();
+        workers = new ArrayList <byte []> ();
+        
     }
     
     @Override
     public void run ()
     {
-        String workerBind = "inproc://writer-worker";
+        String workerBind = "inproc://reader-worker";
 
         Socket router = context.createSocket (ZMQ.ROUTER);
         Socket inrouter = context.createSocket (ZMQ.ROUTER);
-        router.setReceiveBufferSize (recvBufferSize);
-        router.setMaxMsgSize (maxMessageSize);
-        
-        router.setDecoder (PersistDecoder.class);
-        inrouter.setRouterMandatory (true);
 
+        router.setSendBufferSize (sendBufferSize);
+        router.setEncoder (PersistEncoder.class);
+        
         inrouter.bind (workerBind);
 
         for (int i=0; i < numWorkers; i++) {
             String id = String.valueOf (i);
-            ZPWriterWorker worker = new ZPWriterWorker (context, workerBind, id);
+            ZPReaderWorker worker = new ZPReaderWorker (context, workerBind, id);
             worker.start ();
             workers.add (id.getBytes ());
         }
 
         router.bind (bind);
 
-        LOG.info ("Front Server Started on " + bind);
-
-        ZDevice.addressDevice (router, inrouter, workers);
+        LOG.info ("Reader bind on " + bind);
         
-        LOG.info("Front Ended");
+        ZDevice.loadBalanceDevice (router, inrouter, workers);
+        
         ZLogManager.instance ().shutdown ();
         
         context.destroy ();
-
+        LOG.info ("Reader Front Ended");
     }
-
+    
 }

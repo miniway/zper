@@ -1,3 +1,3 @@
 #!/bin/bash
 
-$(dirname $0)/zper-run-class.sh org.zeromq.zper.perf.ConsumerPerformance $@
+$(dirname $0)/zper-run-class.sh org.zper.perf.ConsumerPerformance $@

@@ -1,3 +1,3 @@
 #!/bin/bash
 
-$(dirname $0)/zper-run-class.sh org.zeromq.zper.ZPer $@
+$(dirname $0)/zper-run-class.sh org.zper.ZPer $@

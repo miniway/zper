@@ -22,7 +22,7 @@
     <http://www.gnu.org/licenses/>.
     =========================================================================
 */
-package org.zeromq.zper;
+package org.zper;
 
 import java.util.Properties;
 
@@ -30,6 +30,8 @@ import org.jeromq.ZContext;
 import org.jeromq.ZMQ;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.zper.server.ZPReader;
+import org.zper.server.ZPWriter;
 
 public class ZPer
 {

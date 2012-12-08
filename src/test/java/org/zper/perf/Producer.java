@@ -1,11 +1,11 @@
-package org.zeromq.zper.perf;
+package org.zper.perf;
 
 import java.util.Properties;
 
 import org.jeromq.ZContext;
 import org.jeromq.ZMQ;
 import org.jeromq.ZMQ.Socket;
-import org.zeromq.zper.ZPUtils;
+import org.zper.ZPUtils;
 
 public class Producer
 {

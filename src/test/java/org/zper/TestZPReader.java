@@ -1,4 +1,4 @@
-package org.zeromq.zper;
+package org.zper;
 
 import static org.junit.Assert.*;
 
@@ -8,10 +8,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 
-import org.zeromq.zper.base.MsgIterator;
-import org.zeromq.zper.base.ZLog;
-import org.zeromq.zper.base.ZLog.SegmentInfo;
-import org.zeromq.zper.base.ZLogManager;
+import org.zper.base.ZLog;
+import org.zper.base.ZLogManager;
+import org.zper.base.ZLog.SegmentInfo;
 import org.jeromq.ZMQ;
 import org.jeromq.ZMQ.Context;
 import org.jeromq.ZMQ.Msg;

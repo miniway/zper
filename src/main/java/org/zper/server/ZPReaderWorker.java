@@ -22,16 +22,18 @@
     <http://www.gnu.org/licenses/>.
     =========================================================================
 */
-package org.zeromq.zper;
+package org.zper.server;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.zeromq.zper.base.Persistence;
-import org.zeromq.zper.base.ZLog;
-import org.zeromq.zper.base.ZLog.SegmentInfo;
-import org.zeromq.zper.base.ZLogManager;
+import org.zper.ZPConstants;
+import org.zper.ZPUtils;
+import org.zper.base.Persistence;
+import org.zper.base.ZLog;
+import org.zper.base.ZLogManager;
+import org.zper.base.ZLog.SegmentInfo;
 import org.jeromq.ZContext;
 import org.jeromq.ZMQ;
 import org.jeromq.ZMQException;

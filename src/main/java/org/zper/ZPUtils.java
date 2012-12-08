@@ -22,13 +22,12 @@
     <http://www.gnu.org/licenses/>.
     =========================================================================
 */
-package org.zeromq.zper;
+package org.zper;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Iterator;
 import java.util.Properties;
 import java.util.UUID;
 
@@ -39,11 +38,10 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.jeromq.ZMQ.Msg;
-import org.zeromq.zper.base.MsgIterator;
-import org.zeromq.zper.base.ZLog;
-import org.zeromq.zper.base.ZLog.SegmentInfo;
-import org.zeromq.zper.base.ZLogManager;
-import org.zeromq.zper.base.ZLogManager.ZLogConfig;
+import org.zper.base.ZLog;
+import org.zper.base.ZLogManager;
+import org.zper.base.ZLog.SegmentInfo;
+import org.zper.base.ZLogManager.ZLogConfig;
 
 public class ZPUtils
 {
@@ -108,7 +106,30 @@ public class ZPUtils
         int tsize = identity [2];
         return new String (identity, 3, tsize);
     }
+    
+    public static byte [] getBytes (long value) 
+    {
+        return ByteBuffer.allocate (8).putLong (value).array ();
+    }
 
+    public static byte [] getBytes (int value) 
+    {
+        return ByteBuffer.allocate (4).putInt (value).array ();
+    }
+
+    public static long getLong (byte [] value) 
+    {
+        return ((ByteBuffer) ByteBuffer.allocate (8).put (value).flip ()).getLong ();
+    }
+
+    public static int getInt (byte [] value) 
+    {
+        if (value.length == 1)
+            return value [0];
+        
+        return ((ByteBuffer) ByteBuffer.allocate (4).put (value).flip ()).getInt ();
+    }
+    
     public static void main (String [] argv) throws Exception
     {
         String cmd = argv [0];
@@ -135,7 +156,7 @@ public class ZPUtils
     }
 
 
-    public static Iterator <Msg> iterator (Msg msg)
+    public static MsgIterator iterator (Msg msg)
     {
         return new MsgIterator (msg.buf ());
     }

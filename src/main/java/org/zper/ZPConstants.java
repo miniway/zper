@@ -1,4 +1,4 @@
-package org.zeromq.zper;
+package org.zper;
 
 public class ZPConstants
 {

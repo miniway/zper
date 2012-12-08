@@ -1,4 +1,4 @@
-package org.zeromq.zper.perf;
+package org.zper.perf;
 
 import java.text.SimpleDateFormat;
 import java.util.Iterator;
@@ -11,7 +11,7 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
-import org.zeromq.zper.ZPUtils;
+import org.zper.ZPUtils;
 
 public class ConsumerPerformance
 {

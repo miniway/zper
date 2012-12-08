@@ -128,6 +128,10 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
      + ----------+
      | status    |       # 1 byte common first frame
      + ----------+
+        - OK : 100
+        - INVALID_OFFSET : 101
+        - INVALID_COMMAND : 102
+        - INTERNAL_ERROR : -1
 
     for fetch request        for stream fetch request ( with -1 max bytes )
      + ---------------+      + ---------------+
@@ -151,6 +155,45 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
      + ----------+
 
 </pre>
+
+```java
+    Context ctx = ZMQ.context (1);
+    Socket sock = ctx.socket (ZMQ.DEALER);
+    
+    sock.setIdentity (ZPUtils.genTopicIdentity (topic, 0));  // flag = 0
+    sock.connect ("tcp://127.0.0.1:5555");
+
+    // get offset
+    sock.sendMore ("OFFSET");
+    sock.sendMore (ZPUtils.getBytes (timestamp));
+    sock.send (ZPUtils.getBytes (entry));
+        
+    status = ZPUtils.getInt (sock.recv ()); // check status is 100
+        
+    while (sock.hasReceiveMore ()) {
+        // 8 byte offset
+        long offset = ZPUtils.getLong (sock.recv ());
+    }
+
+    // fetch data
+    sock.sendMore ("FETCH");
+    sock.sendMore (ZPUtils.getBytes (offset));
+    sock.send (ZPUtils.getBytes (size));
+
+    status = ZPUtils.getInt (sock.recv ()); // check status is 100
+
+    MsgIterator it = ZPUtils.iterator (sock.recvMsg ());
+        
+    while (it.hasNext ()) {
+        Msg msg = it.next ();
+        // ...
+    }
+    // store the last offset somewhere
+    lastOffset = offset + it.validBytes ()
+
+    sock.close ();
+    ctx.term ();
+```
 
 ## Listen acks from ZPER
 * Create a SUB socket

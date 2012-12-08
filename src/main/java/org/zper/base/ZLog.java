@@ -22,7 +22,7 @@
     <http://www.gnu.org/licenses/>.
     =========================================================================
 */
-package org.zeromq.zper.base;
+package org.zper.base;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -47,6 +47,7 @@ import java.util.TreeMap;
 import java.util.regex.Pattern;
 
 import org.jeromq.ZMQ.Msg;
+import org.zper.MsgIterator;
 
 
 public class ZLog {

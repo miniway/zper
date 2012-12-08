@@ -22,7 +22,7 @@
     <http://www.gnu.org/licenses/>.
     =========================================================================
 */
-package org.zeromq.zper.base;
+package org.zper;
 
 import java.nio.ByteBuffer;
 import java.util.Iterator;
@@ -34,10 +34,12 @@ public class MsgIterator implements Iterator <Msg>
     private ByteBuffer buf;
     private int length;
     private int flag;
+    private int valid;
     
     public MsgIterator (ByteBuffer buf)
     {
         this.buf = buf;
+        valid = 0;
     }
 
     @Override
@@ -88,12 +90,18 @@ public class MsgIterator implements Iterator <Msg>
         
         buf.limit (limit);
         buf.position (buf.position () + length);
+        valid = buf.position ();
         return msg;
     }
 
     @Override
     public void remove ()
     {
+    }
+    
+    public int validBytes ()
+    {
+        return valid;
     }
 
 }

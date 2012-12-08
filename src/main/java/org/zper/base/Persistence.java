@@ -22,7 +22,7 @@
     <http://www.gnu.org/licenses/>.
     =========================================================================
 */
-package org.zeromq.zper.base;
+package org.zper.base;
 
 import java.io.FileInputStream;
 import java.io.IOException;

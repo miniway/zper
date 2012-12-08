@@ -1,4 +1,4 @@
-package org.zeromq.zper.base;
+package org.zper.base;
 
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -13,7 +13,6 @@ import static org.junit.Assert.*;
 import org.jeromq.ZMQ;
 import org.jeromq.ZMQ.Context;
 import org.jeromq.ZMQ.Socket;
-import org.zeromq.zper.base.Persistence;
 
 public class TestPersistence
 {
