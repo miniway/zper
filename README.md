@@ -21,13 +21,19 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
 * Handle fetch requests
 * Handle operation requests
 
-### ZPAck
+### ZPAck (at 0.1.1)
 * Listen on the PUB socket for public
 * Connected SUB will get last sucessfully synced offset and the first frame of the message
  * So try to use the first frame as a message id
  * By subscribing, an application get more fined grained offset
 * Listen on the inproc PULL socket for ack input from the ZPWriter
 * Keep basic stats
+
+### ZPRelay (at 0.1.1)
+* Listen on the ROUTER socket for public
+* ZPRelay poll the data file and send new messages to client
+* If the ZPER is restarted, ZPRelay starts to send messages from the topic's last offset.
+* Offers a seamless experience
 
 ### ZPController (at 0.2)
 * When ZPER works as a cluster, ZPER coordinates through ZPController
@@ -59,18 +65,32 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
     # ack configuration
     ack.bind = tcp://*:5557
 
+    # relay configuration
+    relay.bind = tcp://*:5558
+    relay.poll = 1000                   # poll every N milliseconds
+
     # controller configuration (at 0.2)
-    controller.bind = tcp://*:5558
+    controller.bind = tcp://*:5559
     controller.quorum.1 = tcp://addr1:port   # target quorum 1's address
     controller.quorum.2 = tcp://addr2:port   # target quorum 2's address
+
+## How to run ZPER
+
+* Start ZPER
+    ./bin/zper-server-start.sh conf/server.properties
+
+* Stop ZPER
+    ./bin/zper-server-stop.sh 
+
 
 ## Write messages to ZPER
 * Create a DEALER, REQ or PUSH socket and set proper HWM 
 * Set a identity as the following format (ZMQ 3.2.2 or above is required for PUSH)
+* Connect to ZPWriter. To load balance just connect to multiple ZPWriter
 
 <pre>
      + ----------------- + ----------- + ------------------- + ----- + ------------- +
-     | 1 byte-topic-hash | 1 byte-flag | 1 byte-topic-length | topic | 16 bytes uuid |
+     | 1 byte-topic-hash | 1 byte-mode | 1 byte-topic-length | topic | 16 bytes uuid |
      + ----------------- + ----------- + ------------------- + ----- + ------------- +
 
      Hash function is
@@ -82,11 +102,29 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
      2 (Slowest) : Response at every write (REQ)
 </pre>
 
+* RAW format - follows ZMTP 2.0 frame
+<pre>
+    # if a message has more frame
+    flag |= 0x01
+
+    # when payload length <= 255 
+    + ----------- + ------------- + -------------------- +
+    | 1 byte-flag | 1 byte-length | length-bytes-payload |
+    + ----------- + ------------- + -------------------- +
+
+    # when payload length > 255
+    flag |= 0x02
+    + ----------- + -------------- + ---------------------+
+    | 1 byte-flag | 8 bytes-length | length-bytes-payload |
+    + ----------- + -------------- + ---------------------+
+
+</pre>
+
 ```java
     Context ctx = ZMQ.context (1);
     Socket sock = ctx.socket (ZMQ.DEALER);
     
-    sock.setIdentity (ZPUtils.genTopicIdentity (topic, 0));  // flag = 0
+    sock.setIdentity (ZPUtils.genTopicIdentity (topic, 0));  // mode = 0
     sock.connect ("tcp://127.0.0.1:5555");
 
     while (true) {
@@ -102,11 +140,12 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
 * Recommend to send multi frames with the first frame as a message id which will be used at the ZPAck
 
 
-## Fetch messages to ZPER
+## Fetch messages from ZPER
 * Create a DEALER or REQ socket
 * Set a identity as the above format
-* Connect to ZPReader
-* Send a request (socket.write) and fetch (socket.read) messages
+* Connect to ZPReader. To sink messages just connect to multiple ZPReader
+* Send a "OFFSET" request if you don't have the last offset
+* Send a "FETCH" request 
 
 <pre>
     # command consists of 1 command frame and variable argument frames 
@@ -161,7 +200,7 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
     Socket sock = ctx.socket (ZMQ.DEALER);
     
     sock.setIdentity (ZPUtils.genTopicIdentity (topic, 0));  // flag = 0
-    sock.connect ("tcp://127.0.0.1:5555");
+    sock.connect ("tcp://127.0.0.1:5556");
 
     // get offset
     sock.sendMore ("OFFSET");
@@ -186,7 +225,7 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
         
     while (it.hasNext ()) {
         Msg msg = it.next ();
-        // ...
+        // Do your stuff ...
     }
     // store the last offset somewhere
     lastOffset = offset + it.validBytes ()
@@ -194,8 +233,61 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
     sock.close ();
     ctx.term ();
 ```
+```java
+    // Streaming mode (at 0.1.1)
+    Context ctx = ZMQ.context (1);
+    Socket sock = ctx.socket (ZMQ.DEALER);
+    
+    sock.setIdentity (ZPUtils.genTopicIdentity (topic, 0));  // flag = 0
+    sock.connect ("tcp://127.0.0.1:5556");
 
-## Listen acks from ZPER
+    // get offset, refer above
+
+    // fetch data
+    sock.sendMore ("FETCH");
+    sock.sendMore (ZPUtils.getBytes (offset));
+    sock.send (ZPUtils.getBytes (-1L));   // Streaming
+
+    while (true) {
+        Msg msg = sock.recvMsg (ZMQ.DONTWAIT);
+        if (msg == null)
+            break;  // no more message
+        // Do your stuff ...
+
+        // store the last offset somewhere
+        lastOffset += ZPUtils.validBytes (msg);
+    }
+
+    sock.close ();
+    ctx.term ();
+```
+
+## Fetch messages from ZPRelay (at 0.1.1)
+
+* Create a DEALER or PULL socket
+* Set a identity as the above format ((ZMQ 3.2.2 or above is required for PULL)
+* Connect to ZPRelay. 
+* Doesn't require offset. But you can loose messages if the broker restarted.
+
+```java
+    Context ctx = ZMQ.context (1);
+    Socket sock = ctx.socket (ZMQ.DEALER);
+    
+    sock.setIdentity (ZPUtils.genTopicIdentity (topic, 0));  // flag = 0
+    sock.connect ("tcp://127.0.0.1:5558");
+
+    while (true) {
+        Msg msg = sock.recvMsg ();
+        if (msg == null)
+            break;  // interrupted
+        // Do your stuff ...
+    }
+
+    sock.close ();
+    ctx.term ();
+```
+
+## Listen acks from ZPER (at 0.1.1)
 * Create a SUB socket
 * Set subscribe topics which you want to subscribe
 * Connect to ZPAck

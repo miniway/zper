@@ -155,7 +155,15 @@ public class ZPUtils
         System.out.println ("Total : " + total);
     }
 
-
+    public static int validBytes (Msg msg)
+    {
+        int size = msg.size ();
+        if (size > 255)
+            return 9 + size;
+        else
+            return 2 + size;
+    }
+    
     public static MsgIterator iterator (Msg msg)
     {
         return new MsgIterator (msg.buf ());
