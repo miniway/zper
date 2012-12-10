@@ -42,6 +42,27 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
 * Client can get cluster information 
 * Keep basic stats
 
+## RAW format 
+* follows ZMTP 2.0 frame
+
+<pre>
+    # if a message has more frame
+    flag |= 0x01
+
+    # when payload length is less than 255 
+    + ----------- + ------------- + -------------------- +
+    | 1 byte-flag | 1 byte-length | length-bytes-payload |
+    + ----------- + ------------- + -------------------- +
+
+    # when payload length exceeds 255
+    flag |= 0x02
+    + ----------- + -------------- + ---------------------+
+    | 1 byte-flag | 8 bytes-length | length-bytes-payload |
+    + ----------- + -------------- + ---------------------+
+
+</pre>
+
+
 ## Configuration
 
     # common configuration
@@ -100,24 +121,6 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
      0 (Fastest) : No response (DEALER and PUSH)
      1           : Response at flush (DEALER)
      2 (Slowest) : Response at every write (REQ)
-</pre>
-
-* RAW format - follows ZMTP 2.0 frame
-<pre>
-    # if a message has more frame
-    flag |= 0x01
-
-    # when payload length <= 255 
-    + ----------- + ------------- + -------------------- +
-    | 1 byte-flag | 1 byte-length | length-bytes-payload |
-    + ----------- + ------------- + -------------------- +
-
-    # when payload length > 255
-    flag |= 0x02
-    + ----------- + -------------- + ---------------------+
-    | 1 byte-flag | 8 bytes-length | length-bytes-payload |
-    + ----------- + -------------- + ---------------------+
-
 </pre>
 
 ```java
