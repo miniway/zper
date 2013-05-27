@@ -16,14 +16,14 @@ import org.junit.Test;
 public class TestZPWriter
 {
     private static ZPer server;
-    private static String bind = "tcp://*:5555";
+    private static String bind = "tcp://*:5557";
     private static String topic = "test";
 
     @BeforeClass
     public static void start () throws Exception 
     {
         Properties conf = new Properties ();
-        conf.setProperty ("front.bind", bind);
+        conf.setProperty ("writer.bind", bind);
         conf.setProperty ("base_dir", "/tmp/zlogs/");
         
         server = new ZPer (conf);
@@ -51,7 +51,7 @@ public class TestZPWriter
         sock.setIdentity (ZPUtils.genTopicIdentity (topic, 0));
         sock.setLinger (100);
 
-        boolean ret = sock.connect ("tcp://127.0.0.1:5555");
+        boolean ret = sock.connect ("tcp://127.0.0.1:5557");
         assertTrue (ret);
 
 
@@ -81,7 +81,7 @@ public class TestZPWriter
         sock.setIdentity (ZPUtils.genTopicIdentity (topic, 0));
         sock.setLinger (100);
 
-        boolean ret = sock.connect ("tcp://127.0.0.1:5555");
+        boolean ret = sock.connect ("tcp://127.0.0.1:5557");
         assertTrue (ret);
 
 

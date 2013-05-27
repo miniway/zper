@@ -1,5 +1,6 @@
 package org.zper.base;
 
+import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
@@ -47,12 +48,12 @@ public class TestPersistence
         
         Context ctx = ZMQ.context (1);
         Socket router = ctx.socket (ZMQ.ROUTER);
-        router.bind ("tcp://127.0.0.1:6001");
+        router.bind ("tcp://127.0.0.1:6002");
         router.setEncoder (Persistence.PersistEncoder.class);
         
         Socket dealer = ctx.socket (ZMQ.DEALER);
         dealer.setIdentity ("A");
-        dealer.connect ("tcp://127.0.0.1:6001");
+        dealer.connect ("tcp://127.0.0.1:6002");
         
         Thread.sleep (1000);
         router.sendMore ("A");
@@ -75,6 +76,7 @@ public class TestPersistence
         String longdata = "";
         for (int i = 0; i < 30; i++)
             longdata += "1234567890";
+        new File(datadir + "/new_topic").mkdirs();
         String path = datadir + "/new_topic/00000000000000000000.dat";
         RandomAccessFile raf = new RandomAccessFile(path, "rw");
         FileChannel ch = raf.getChannel ();
@@ -94,12 +96,12 @@ public class TestPersistence
         
         Context ctx = ZMQ.context (1);
         Socket router = ctx.socket (ZMQ.ROUTER);
-        router.bind ("tcp://127.0.0.1:6001");
+        router.bind ("tcp://127.0.0.1:6003");
         router.setEncoder (Persistence.PersistEncoder.class);
         
         Socket dealer = ctx.socket (ZMQ.DEALER);
         dealer.setIdentity ("A");
-        dealer.connect ("tcp://127.0.0.1:6001");
+        dealer.connect ("tcp://127.0.0.1:6003");
         
         Thread.sleep (1000);
         router.sendMore ("A");
