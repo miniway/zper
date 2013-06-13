@@ -47,10 +47,14 @@ import java.util.TreeMap;
 import java.util.regex.Pattern;
 
 import org.jeromq.ZMQ.Msg;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.zper.MsgIterator;
 
 
 public class ZLog {
+
+    static final Logger LOG = LoggerFactory.getLogger(ZLog.class);
 
     private final static String SUFFIX = ".dat";
     
@@ -233,7 +237,7 @@ public class ZLog {
             i++;
         }
         if (top == values.length)
-            offsets[offsets.length-1] = current.offset();
+            offsets[offsets.length-1] = current.flushedOffset();
         return offsets;
     }
     
@@ -507,32 +511,39 @@ public class ZLog {
         private long start;
         private Segment segment;
         
-        protected SegmentInfo (long start, Segment segment)
+        protected SegmentInfo(long start, Segment segment)
         {
             this.start = start;
             this.segment = segment;
         }
 
-        public String path ()
+        public String path()
         {
-            return segment.path.getAbsolutePath ();
+            return segment.path.getAbsolutePath();
         }
 
-        public long start ()
+        public long start()
         {
             return start;
         }
         
-        public long offset ()
+        public long offset()
         {
-            return segment.offset ();
+            return segment.offset();
         }
+
+        public long flushedOffset()
+        {
+            return segment.flushedOffset();
+        }
+
     }
     
     private static class Segment {
 
         private final ZLog zlog;
         private long size;
+        private long flushed_size;
         private long start;
         private FileChannel channel;
         private MappedByteBuffer buffer;
@@ -543,9 +554,10 @@ public class ZLog {
             this.zlog = zlog;
             this.start = offset;
             this.size = 0;
+            this.flushed_size = 0;
             this.path = new File(zlog.path(), getName(offset));
-            if (path.exists()) 
-                size = path.length();
+            if (path.exists())
+                flushed_size = size = path.length();
         }
         
 
@@ -610,16 +622,29 @@ public class ZLog {
         protected final long size() {
             return size;
         }
-        
+
+        protected final long flushedOffset() {
+            return start + flushed_size;
+        }
         
         protected final long start() {
             return start;
         }
         
         protected void flush() {
-            if (buffer != null) {
+            if (channel != null) {
+                try {
+                    channel.force(false);
+                    flushed_size = size;
+                    if (LOG.isDebugEnabled())
+                        LOG.debug("Channel {} Flush {}", path, size);
+                } catch (IOException e) {
+                    LOG.error("Flush Error", e);
+                }
+            } else if (buffer != null) {
                 buffer.force();
                 size = buffer.position();
+                flushed_size = size;
             }
         }
 
@@ -653,7 +678,7 @@ public class ZLog {
 
                 if (pos < ch.size ()) {
                     ch.truncate (pos);
-                    size = pos;
+                    flushed_size = size = pos;
                 }
             } finally {
                 lock.release ();
@@ -664,13 +689,17 @@ public class ZLog {
         protected void close() {
             if (channel == null)
                 return;
-            
+
+            LOG.info("Closing Segment {}({})", path, size);
             flush();
+
             try {
                 channel.truncate(size);
                 channel.close();
             } catch (IOException e) {
             }
+            LOG.info("Closed Segment {}({})", path, size);
+
             channel = null;
             buffer = null;
         }

@@ -153,30 +153,36 @@ public class ZPReaderWorker extends Thread
         }
     }
 
-    private void processFetch (ZLog zlog, List<Msg> args)
+    private void processFetch(ZLog zlog, List<Msg> args)
     {
-        if (args.size () != 2) {
-            error ();
+        if (args.size() != 2) {
+            error();
             return;
         }
-        long offset = args.get (0).buf ().getLong ();
-        long size = args.get (1).buf ().getLong ();
+        long offset = args.get(0).buf().getLong();
+        long size = args.get(1).buf().getLong();
 
-        SegmentInfo info = zlog.segmentInfo (offset);
+        SegmentInfo info = zlog.segmentInfo(offset);
         
-        if (info == null || info.offset () < offset) {
+        if (info == null || info.flushedOffset() < offset) {
+            LOG.info("No such segment for offset {}, or found {}",
+                                offset, info == null ? -1 : info.flushedOffset());
             code (ZPConstants.TYPE_RESPONSE, ZPConstants.STATUS_INVALID_OFFSET);
             return;
         }
         
-        assert (info.start () <= offset);
+        assert (info.start() <= offset);
         
-        code (ZPConstants.TYPE_FILE, ZPConstants.STATUS_OK);
-        worker.sendMore (info.path ());
-        sendLong (offset - info.start (), true);
-        if (info.offset () - offset < size)
-            size = info.offset () - offset;
-        sendLong (size, false);
+        code(ZPConstants.TYPE_FILE, ZPConstants.STATUS_OK);
+        worker.sendMore(info.path());
+        sendLong(offset - info.start(), true);
+        if (info.flushedOffset() - offset < size)
+            size = info.flushedOffset() - offset;
+        sendLong(size, false);
+
+        if (LOG.isDebugEnabled())
+            LOG.debug("FETCH {} {} {}", new Object[]{offset, size, offset + size});
+
     }
 
     private void processOffset (ZLog zlog, List<Msg> args)
