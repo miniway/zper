@@ -26,8 +26,8 @@ package org.zper;
 
 import java.util.Properties;
 
-import org.jeromq.ZContext;
-import org.jeromq.ZMQ;
+import org.zeromq.ZContext;
+import org.zeromq.ZMQ;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zper.server.ZPReader;
@@ -36,54 +36,56 @@ import org.zper.server.ZPWriter;
 public class ZPer
 {
     static final Logger LOG = LoggerFactory.getLogger(ZPer.class);
-    
+
     private Properties conf;
     private ZContext context;
     private boolean destoryed = false;
-    
-    public ZPer (Properties conf)
+
+    public ZPer(Properties conf)
     {
         this.conf = conf;
     }
-    
-    public void start ()
-    {
-        context = new ZContext ();
-        // fix lazy creation
-        context.setContext (ZMQ.context (Integer.parseInt (conf.getProperty ("io_threads", "1"))));
 
-        
-        ZPWriter writer = new ZPWriter (context, conf);
-        ZPReader reader = new ZPReader (context, conf);
-        
-        writer.start ();
-        reader.start ();
-        
+    public void start()
+    {
+        context = new ZContext();
+        // fix lazy creation
+        context.setContext(ZMQ.context(Integer.parseInt(conf.getProperty("io_threads", "1"))));
+
+
+        ZPWriter writer = new ZPWriter(context, conf);
+        ZPReader reader = new ZPReader(context, conf);
+
+        writer.start();
+        reader.start();
+
     }
-    
-    synchronized public void shutdown ()
+
+    synchronized public void shutdown()
     {
         if (!destoryed) {
-            context.destroy ();
+            context.destroy();
             destoryed = true;
         }
     }
-    
-    public static void main (String [] argv) 
-    {
-        Properties conf = ZPUtils.setup (argv);
 
-        final ZPer serv = new ZPer (conf);
-        serv.start ();
-        
-        Runtime.getRuntime().addShutdownHook (new Thread ("shutdownHook") {
+    public static void main(String[] argv)
+    {
+        Properties conf = ZPUtils.setup(argv);
+
+        final ZPer serv = new ZPer(conf);
+        serv.start();
+
+        Runtime.getRuntime().addShutdownHook(new Thread("shutdownHook")
+        {
 
             @Override
-            public void run () {
-                serv.shutdown ();
+            public void run()
+            {
+                serv.shutdown();
             }
 
-          });
+        });
 
     }
 }

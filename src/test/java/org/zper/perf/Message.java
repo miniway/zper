@@ -5,49 +5,49 @@ import java.util.zip.CRC32;
 
 public class Message
 {
-    private byte [] header;
-    private byte [] data;
-    
-    public Message (String data)
+    private byte[] header;
+    private byte[] data;
+
+    public Message(String data)
     {
         header = null;
-        this.data = data.getBytes ();
+        this.data = data.getBytes();
     }
-    
-    public Message (byte [] header, byte [] data)
+
+    public Message(byte[] header, byte[] data)
     {
         this.header = header;
         this.data = data;
     }
 
-    public long payloadSize ()
+    public long payloadSize()
     {
-        return header.length + data.length; 
+        return header.length + data.length;
     }
 
-    public byte [] getHeader ()
+    public byte[] getHeader()
     {
         if (header == null) {
-            ByteBuffer buf = ByteBuffer.allocate (5);
-            buf.put ((byte) 0);
-            
-            CRC32 crc = new CRC32 ();
-            crc.update (data);
-            buf.putInt ((int) (0xffffffffL & crc.getValue ()));
-            
-            header = buf.array ();
+            ByteBuffer buf = ByteBuffer.allocate(5);
+            buf.put((byte) 0);
+
+            CRC32 crc = new CRC32();
+            crc.update(data);
+            buf.putInt((int) (0xffffffffL & crc.getValue()));
+
+            header = buf.array();
         }
         return header;
     }
 
-    public byte [] getPayload ()
+    public byte[] getPayload()
     {
         return data;
     }
 
-    public long validBytes ()
+    public long validBytes()
     {
-        return header.length + 2L + data.length + (data.length > 255 ? 9L : 2L); 
+        return header.length + 2L + data.length + (data.length > 255 ? 9L : 2L);
 
     }
 

@@ -26,132 +26,134 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
 import java.util.List;
 
-import org.jeromq.ZMQ.Msg;
+import zmq.Msg;
 import org.junit.Before;
 import org.junit.Test;
 
 import zmq.Utils;
+
 import static org.junit.Assert.*;
 import static org.hamcrest.CoreMatchers.*;
 
-public class TestZLogManager 
+public class TestZLogManager
 {
     private String datadir = ".tmp";
-    
+
     @Before
-    public void setUp () 
+    public void setUp()
     {
-        reset (2048L, 1000L);
+        reset(2048L, 1000L);
     }
 
-    private void reset (long size, long interval)
+    private void reset(long size, long interval)
     {
-        File f = new File (datadir, "new_topic");
-        Utils.delete (f);
-        ZLogManager.instance ().config ()
-            .set ("base_dir", datadir)
-            .set ("segment_size", size)
-            .set ("flush_interval", interval);
-        ZLogManager.instance ().get ("new_topic").reset ();
+        File f = new File(datadir, "new_topic");
+        Utils.delete(f);
+        ZLogManager.instance().config()
+                .set("base_dir", datadir)
+                .set("segment_size", size)
+                .set("flush_interval", interval);
+        ZLogManager.instance().get("new_topic").reset();
     }
-    
-    @Test
-    public void testNewTopic () throws Exception 
-    {
-        ZLogManager m = ZLogManager.instance ();
-        ZLog log = m.get ("new_topic");
-        
-        assertThat (log.start (), is (0L));
-        assertThat (log.offset (), is (0L));
-        
-        long pos = log.append (new Msg ("hello"));
-        assertThat (pos, is (7L));
-        log.flush ();
-        
-        assertThat (log.offset (), is (7L));
-        log.close ();
-    }
-    
-    @Test
-    public void testOverflow () throws Exception 
-    {
-        reset (12L, 10000L); // do not flush
-        ZLogManager m = ZLogManager.instance ();
-        ZLog log = m.get ("new_topic");
-        
-        assertThat (log.start (), is (0L));
-        assertThat (log.offset (), is (0L));
-        
-        log.append (new Msg ("12345"));
-        assertThat (log.count (), is (1));
-        long pos = log.append (new Msg ("1234567890"));
-        assertThat (log.count (), is (2));
-        assertThat (pos, is (19L));
-        assertThat (log.offset (), is (19L));
-        log.close ();
-    }
-    
-    @SuppressWarnings("resource")
-    @Test
-    public void testRecover () throws Exception 
-    {
-        ZLogManager m = ZLogManager.instance ();
-        m.config ().set ("recover", true);
 
-        String path = datadir + "/new_topic/00000000000000000000.dat";
-        FileChannel ch = new RandomAccessFile(path, "rw").getChannel ();
-        MappedByteBuffer buf = ch.map (MapMode.READ_WRITE, 0, m.config ().segment_size);
-        buf.put ((byte) 0);
-        buf.put ((byte) 5);
-        buf.put ("12345".getBytes ());
-        buf.put ((byte) 0);
-        buf.put ((byte) 11);
-        buf.put ("67890abcdef".getBytes ());
-        ch.close ();
-
-        m.shutdown ();
-
-        ZLog log = m.get ("new_topic");
-        assertThat (log.offset (), is (20L));
-        
-        log.append (new Msg ("hello"));
-        assertThat (log.offset (), is (27L));
-
-    }
-    
     @Test
-    public void testReadMsg () throws Exception 
+    public void testNewTopic() throws Exception
     {
-        reset (13L, 10000L);
-        ZLogManager m = ZLogManager.instance ();
-        ZLog log = m.get ("new_topic");
-        
-        log.append (new Msg ("12345678"));
-        log.append (new Msg ("12345"));
-        log.append (new Msg ("123"));
-        log.flush ();
-        
-        long [] offsets = log.offsets ();
-        assertThat (offsets[0], is (0L));
-        assertThat (offsets[1], is (10L));
-        
-        List<Msg> msgs = log.readMsg (10L, 1000);
-        assertThat (msgs.size (), is (2));
-        assertThat (msgs.get (0).size (), is (5));
-        assertThat (msgs.get (1).size (), is (3));
-    }
-    
-    @Test
-    public void testRead() throws Exception {
-        reset (13L, 10000L);
         ZLogManager m = ZLogManager.instance();
         ZLog log = m.get("new_topic");
-        
+
+        assertThat(log.start(), is(0L));
+        assertThat(log.offset(), is(0L));
+
+        long pos = log.append(new Msg("hello"));
+        assertThat(pos, is(7L));
+        log.flush();
+
+        assertThat(log.offset(), is(7L));
+        log.close();
+    }
+
+    @Test
+    public void testOverflow() throws Exception
+    {
+        reset(12L, 10000L); // do not flush
+        ZLogManager m = ZLogManager.instance();
+        ZLog log = m.get("new_topic");
+
+        assertThat(log.start(), is(0L));
+        assertThat(log.offset(), is(0L));
+
+        log.append(new Msg("12345"));
+        assertThat(log.count(), is(1));
+        long pos = log.append(new Msg("1234567890"));
+        assertThat(log.count(), is(2));
+        assertThat(pos, is(19L));
+        assertThat(log.offset(), is(19L));
+        log.close();
+    }
+
+    @SuppressWarnings("resource")
+    @Test
+    public void testRecover() throws Exception
+    {
+        ZLogManager m = ZLogManager.instance();
+        m.config().set("recover", true);
+
+        String path = datadir + "/new_topic/00000000000000000000.dat";
+        FileChannel ch = new RandomAccessFile(path, "rw").getChannel();
+        MappedByteBuffer buf = ch.map(MapMode.READ_WRITE, 0, m.config().segment_size);
+        buf.put((byte) 0);
+        buf.put((byte) 5);
+        buf.put("12345".getBytes());
+        buf.put((byte) 0);
+        buf.put((byte) 11);
+        buf.put("67890abcdef".getBytes());
+        ch.close();
+
+        m.shutdown();
+
+        ZLog log = m.get("new_topic");
+        assertThat(log.offset(), is(20L));
+
+        log.append(new Msg("hello"));
+        assertThat(log.offset(), is(27L));
+
+    }
+
+    @Test
+    public void testReadMsg() throws Exception
+    {
+        reset(13L, 10000L);
+        ZLogManager m = ZLogManager.instance();
+        ZLog log = m.get("new_topic");
+
         log.append(new Msg("12345678"));
         log.append(new Msg("12345"));
         log.append(new Msg("123"));
         log.flush();
-        
+
+        long[] offsets = log.offsets();
+        assertThat(offsets[0], is(0L));
+        assertThat(offsets[1], is(10L));
+
+        List<Msg> msgs = log.readMsg(10L, 1000);
+        assertThat(msgs.size(), is(2));
+        assertThat(msgs.get(0).size(), is(5));
+        assertThat(msgs.get(1).size(), is(3));
+    }
+
+    @Test
+    public void testRead() throws Exception
+    {
+        reset(13L, 10000L);
+        ZLogManager m = ZLogManager.instance();
+        ZLog log = m.get("new_topic");
+
+        log.append(new Msg("12345678"));
+        log.append(new Msg("12345"));
+        log.append(new Msg("123"));
+        log.flush();
+
         FileChannel ch = log.open(10L);
         assertThat(log.offset(), is(22L));
         assertThat(ch.size(), is(12L));
