@@ -211,7 +211,7 @@ public class ZDevice
                         // routing address
                         success = backend_.send(new Msg(target), ZMQ.ZMQ_SNDMORE);
                         if (!success) {
-                            if (ZError.is(ZError.EHOSTUNREACH))
+                            if (backend_.errno() != ZError.EHOSTUNREACH)
                                 continue;
                             else
                                 break;

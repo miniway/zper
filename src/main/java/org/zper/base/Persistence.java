@@ -30,6 +30,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.concurrent.locks.LockSupport;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import zmq.DecoderBase;
 import zmq.EncoderBase;
 import zmq.IMsgSink;
@@ -38,21 +40,23 @@ import zmq.Msg;
 import zmq.V1Protocol;
 import zmq.ZError;
 
-public class Persistence {
+public class Persistence
+{
+    static final Logger LOG = LoggerFactory.getLogger(Persistence.class);
 
     public static final int MESSAGE_RESPONSE = 1;
     public static final int MESSAGE_FILE = 2;
     public static final int MESSAGE_ERROR = 3;
-    
+
     public static final int STATUS_INTERNAL_ERROR = -1;
-    
-    public static class PersistDecoder extends DecoderBase 
+
+    public static class PersistDecoder extends DecoderBase
     {
         private static final int one_byte_size_ready = 0;
         private static final int eight_byte_size_ready = 1;
         private static final int flags_ready = 2;
         private static final int message_ready = 3;
-        
+
         private IMsgSink msg_sink;
         private final long maxmsgsize;
         private int msg_flags;
@@ -62,7 +66,7 @@ public class Persistence {
         private ByteBuffer buffer;              //  Current operating buffer
         private ByteBuffer active;              //  Active buffer
         private ByteBuffer standby;             //  Standby buffer
-        private ByteBuffer threshold;           
+        private ByteBuffer threshold;
         private ByteBuffer standby_threshold;
         private ByteBuffer dummy;               //  Dummy buffer
         private boolean identity_received;
@@ -70,49 +74,49 @@ public class Persistence {
         private int start;
         private int end;
         private int count;
-        
-        public PersistDecoder (int bufsize_, long maxmsgsize_, IMsgSink session, int version_)
+
+        public PersistDecoder(int bufsize_, long maxmsgsize_, IMsgSink session, int version_)
         {
-            super (0);
+            super(0);
 
             maxmsgsize = maxmsgsize_;
             version = version_;
             msg_sink = session;
             identity_received = false;
-            
+
             if (maxmsgsize_ < 0)
                 bufsize = bufsize_ * 10;
             else
                 bufsize = (int) maxmsgsize_;
-            
-            active = ByteBuffer.allocateDirect (bufsize);
-            standby = ByteBuffer.allocateDirect (bufsize);
-            dummy = ByteBuffer.allocate (0);
+
+            active = ByteBuffer.allocateDirect(bufsize);
+            standby = ByteBuffer.allocateDirect(bufsize);
+            dummy = ByteBuffer.allocate(0);
             threshold = standby_threshold = null;
             start = end = count = 0;
             read_pos = 0;
-            next_step (null, 1, flags_ready);
+            next_step(null, 1, flags_ready);
         }
 
         @Override
-        public void set_msg_sink (IMsgSink msg_sink)
+        public void set_msg_sink(IMsgSink msg_sink)
         {
             this.msg_sink = msg_sink;
         }
 
         @Override
-        protected boolean next() 
+        protected boolean next()
         {
             if (version == V1Protocol.VERSION) {
-                switch(state()) {
+                switch (state()) {
                 case one_byte_size_ready:
-                    return one_byte_size_ready ();
+                    return one_byte_size_ready();
                 case eight_byte_size_ready:
-                    return eight_byte_size_ready ();
+                    return eight_byte_size_ready();
                 case flags_ready:
-                    return flags_ready ();
+                    return flags_ready();
                 case message_ready:
-                    return message_ready ();
+                    return message_ready();
                 default:
                     return false;
                 }
@@ -120,237 +124,260 @@ public class Persistence {
             return false;
         }
 
+        /**
+         * This is called when there's no more data to process at the buffer
+         *
+         * @return ByteBuffer, socket read can fill the returned buffer at maximum to its limit
+         */
         @Override
-        public ByteBuffer get_buffer () 
+        public ByteBuffer get_buffer()
         {
-            if (active.remaining () < to_read) {
-                
-                if (threshold != null && threshold.hasRemaining ()) {
-                    LockSupport.parkNanos (1);
+            int remaining = buffer == null ? 0 : buffer.remaining();
+            if (active.remaining() < to_read) {
+
+                if (threshold != null && threshold.hasRemaining()) {
+                    LockSupport.parkNanos(1);
                     return dummy; // busy waiting
                 }
-                
-                active.limit (active.position ());
-                active.position (end);
-    
+
+                active.limit(active.position() + remaining);
+                active.position(end);
+
                 start = end = 0;
-                standby.clear ();
-                standby.put (active.slice ());
-                
+                standby.clear();
+                standby.put(active.slice());
+                standby.position(standby.position() - remaining);
                 ByteBuffer temp = active;
                 active = standby;
                 standby = temp;
                 threshold = standby_threshold;
             }
-            buffer = active.slice ();
+            buffer = active.slice();
+            buffer.position(remaining);
             read_pos = 0;
             return buffer;
         }
 
+        /**
+         * @param buf
+         * @param size_ bytes that are received from socket
+         * @return processed bytes. buf must advance as many as the returned value
+         */
         @Override
-        public int process_buffer (ByteBuffer buf, int size_) 
+        public int process_buffer(ByteBuffer buf, int size_)
         {
             //  Check if we had an error in previous attempt.
             if (state() < 0)
                 return -1;
-            
+
 
             while (true) {
 
                 //  Try to get more space in the message to fill in.
                 //  If none is available, return.
                 while (to_read == 0) {
-                    if (!next ()) {
+                    if (!next()) {
                         if (state() < 0) {
                             return -1;
                         }
 
-                        return buf.position ();
+                        return buf.position();
                     }
                 }
 
                 //  If there are no more data in the buffer, return.
-                if (to_read > buf.remaining ()) {
+                if (to_read > buf.remaining()) {
 
-                    if (!push_msg ()) {
-                        return buf.position (); // block
+                    if (push_msg() != 0) {
+                        return buf.position(); // block
                     }
-                    
-                    to_read -= buf.remaining ();
-                    active.position (active.position () + size_);
-                    
+
+                    active.position(active.position() + read_pos);
+
                     return size_;
                 }
-                
+
                 //  Copy the data from buffer to the message.
                 read_pos += to_read;
-                buf.position (read_pos);
+                buf.position(read_pos);
                 to_read = 0;
             }
         }
 
-        private boolean one_byte_size_ready () {
-            
-            buffer.position (read_pos - 1);
-            msg_size = buffer.get ();
+        private boolean one_byte_size_ready()
+        {
+
+            buffer.position(read_pos - 1);
+            msg_size = buffer.get();
             if (msg_size < 0)
                 msg_size = (0xff) & msg_size;
 
             //  Message size must not exceed the maximum allowed size.
             if (maxmsgsize >= 0)
                 if (msg_size > maxmsgsize) {
-                    decoding_error ();
+                    LOG.error("Message size too large " + msg_size);
+                    decoding_error();
                     return false;
                 }
 
-            next_step (null, msg_size, message_ready);
-            
+            next_step(null, msg_size, message_ready);
+
             return true;
         }
-        
-        private boolean eight_byte_size_ready() {
-            
+
+        private boolean eight_byte_size_ready()
+        {
             //  The payload size is encoded as 64-bit unsigned integer.
             //  The most significant byte comes first.
-            buffer.position (read_pos - 8);
+            buffer.position(read_pos - 8);
             final long size = buffer.getLong();
 
             //  Message size must not exceed the maximum allowed size.
             if (maxmsgsize >= 0)
                 if (msg_size > maxmsgsize) {
-                    decoding_error ();
+                    LOG.error("Message size too large " + msg_size);
+                    decoding_error();
                     return false;
                 }
 
             //  Message size must fit within range of size_t data type.
             if (msg_size > Integer.MAX_VALUE) {
-                decoding_error ();
+                LOG.error("Message size too large " + msg_size);
+                decoding_error();
                 return false;
             }
-            
+
             msg_size = (int) size;
-            next_step (null, msg_size, message_ready);
+            next_step(null, msg_size, message_ready);
 
             return true;
         }
-        
-        private boolean flags_ready() {
+
+        private boolean flags_ready()
+        {
 
             //  Store the flags from the wire into the message structure.
             msg_flags = 0;
-            buffer.position (read_pos - 1);
-            int first = buffer.get ();
+            buffer.position(read_pos - 1);
+            int first = buffer.get();
             if ((first & V1Protocol.MORE_FLAG) > 0)
                 msg_flags |= Msg.more;
-            
+
+            if (first > 3) {
+                LOG.error("Invalid Flag " + first);
+                decoding_error();
+                return false;
+            }
+
             //  The payload length is either one or eight bytes,
             //  depending on whether the 'large' bit is set.
             if ((first & V1Protocol.LARGE_FLAG) > 0)
-                next_step (null, 8, eight_byte_size_ready);
+                next_step(null, 8, eight_byte_size_ready);
             else
-                next_step (null, 1, one_byte_size_ready);
-            
+                next_step(null, 1, one_byte_size_ready);
+
             return true;
 
         }
-        
-        private boolean push_msg () 
+
+        private int push_msg()
         {
             if (count == 0)
-                return true;
-            
-            Msg msg = new Msg (4);
-            msg.set_flags (Msg.more);
-            ByteBuffer.wrap (msg.data ()).putInt (count);
-            
-            boolean rc = msg_sink.push_msg (msg);
-            if (!rc) {
-                if (!ZError.is (ZError.EAGAIN))
-                    decoding_error ();
-                
-                return false;
-            }
-            
-            int pos = active.position ();
-            active.position (start);
-            active.limit (end);
-            
-            msg = new Msg (active.slice ());
-            
-            active.limit (bufsize);
-            active.position (pos);
+                return 0;
 
-            
-            rc = msg_sink.push_msg (msg);
-            while (!rc) {
+            Msg msg = new Msg(4);
+            msg.set_flags(Msg.more);
+            ByteBuffer.wrap(msg.data()).putInt(count);
 
-                if (!ZError.is (ZError.EAGAIN)) {
-                    decoding_error ();
-                    return false;
+            int rc = msg_sink.push_msg(msg);
+            if (rc != 0) {
+                if (rc != ZError.EAGAIN) {
+                    decoding_error();
                 }
 
-                rc = msg_sink.push_msg (msg);
+                return rc;
             }
-            
+
+            int pos = active.position();
+            active.position(start);
+            active.limit(end);
+
+            msg = new Msg(active.slice());
+
+            active.limit(bufsize);
+            active.position(pos);
+
+
+            rc = msg_sink.push_msg(msg);
+            while (rc != 0) {
+
+                if (rc != ZError.EAGAIN) {
+                    decoding_error();
+                    return rc;
+                }
+
+                rc = msg_sink.push_msg(msg);
+            }
+
             start = end;
             count = 0;
-            standby_threshold = msg.buf ();
-            return true;
+            standby_threshold = msg.buf();
+            return 0;
         }
-        
-        private boolean message_ready () 
+
+        private boolean message_ready()
         {
             if (!identity_received) {
                 if (msg_sink == null)
                     return false;
-                
-                Msg msg = new Msg (msg_size);
+
+                Msg msg = new Msg(msg_size);
                 assert (msg_flags == 0);
-                msg.set_flags (msg_flags);
+                msg.set_flags(msg_flags);
 
-                buffer.position (read_pos - msg_size);
-                buffer.get (msg.data ());
-                boolean rc = msg_sink.push_msg (msg);
-                if (!rc) {
-                    if (!ZError.is (ZError.EAGAIN))
-                        decoding_error ();
+                buffer.position(read_pos - msg_size);
+                buffer.get(msg.data());
+                int rc = msg_sink.push_msg(msg);
+                if (rc != 0) {
+                    if (rc != ZError.EAGAIN)
+                        decoding_error();
 
-                    buffer.position (buffer.position () - msg_size);
+                    buffer.position(buffer.position() - msg_size);
                     return false;
                 }
                 identity_received = true;
-                start = buffer.position ();
+                start = buffer.position();
             } else {
                 if ((msg_flags & V1Protocol.MORE_FLAG) == 0) {
-                    end = active.position () + buffer.position ();
-                    count ++;
+                    end = active.position() + buffer.position();
+                    count++;
                 }
             }
-            next_step (null, 1, flags_ready);
-            
+            next_step(null, 1, flags_ready);
+
             return true;
         }
-        
+
         @Override
-        public boolean stalled () 
+        public boolean stalled()
         {
-            if (!buffer.hasRemaining ())
+            if (!buffer.hasRemaining())
                 return false;
-            
-            return super.stalled ();
+
+            return super.stalled();
         }
     }
-    
-    public static class PersistEncoder extends EncoderBase 
+
+    public static class PersistEncoder extends EncoderBase
     {
         private static final int identity_ready = 0;
         private static final int size_ready = 1;
         private static final int type_ready = 2;
         private static final int status_ready = 3;
         private static final int message_ready = 4;
-        
+
         private Msg in_progress;
-        private final byte [] tmpbuf;
+        private final byte[] tmpbuf;
         private IMsgSource msg_source;
         private final int version;
         private FileChannel channel;
@@ -359,223 +386,224 @@ public class Persistence {
         private int type;
         private int status;
         private boolean channel_ready;
-        
-        public PersistEncoder (int bufsize_)
+
+        public PersistEncoder(int bufsize_)
         {
-            this (bufsize_, null, 0);
+            this(bufsize_, null, 0);
         }
-        
-        public PersistEncoder (int bufsize_, IMsgSource session, int version)
+
+        public PersistEncoder(int bufsize_, IMsgSource session, int version)
         {
-            super (bufsize_);
+            super(bufsize_);
             this.version = version;
-            tmpbuf = new byte [10];
+            tmpbuf = new byte[10];
             msg_source = session;
-            
+
             //  Write 0 bytes to the batch and go to file_ready state.
-            next_step ((byte []) null, 0, identity_ready, true);
+            next_step((byte[]) null, 0, identity_ready, true);
         }
 
         @Override
-        public void set_msg_source (IMsgSource msg_source_)
+        public void set_msg_source(IMsgSource msg_source_)
         {
             msg_source = msg_source_;
         }
 
         @Override
-        protected boolean next () 
+        protected boolean next()
         {
-            switch (state ()) {
+            switch (state()) {
             case identity_ready:
-                return identity_ready ();
+                return identity_ready();
             case size_ready:
-                return size_ready ();
+                return size_ready();
             case type_ready:
-                return type_ready ();
+                return type_ready();
             case status_ready:
-                return status_ready ();
+                return status_ready();
             case message_ready:
-                return message_ready ();
+                return message_ready();
             default:
                 return false;
             }
         }
 
-        private final boolean size_ready ()
+        private final boolean size_ready()
         {
             //  Write message body into the buffer.
             if (channel_ready)
-                next_step (channel, channel_position, channel_count, type_ready, false);
+                next_step(channel, channel_position, channel_count, type_ready, false);
             else {
                 boolean more = in_progress.has_more();
-                next_step (in_progress.data (), in_progress.size (),
+                next_step(in_progress.data(), in_progress.size(),
                         more ? message_ready : type_ready, !more);
             }
             return true;
         }
 
-        private final boolean identity_ready ()
+        private final boolean identity_ready()
         {
             if (msg_source == null)
                 return false;
-            
-            if (!require_msg ())
+
+            if (!require_msg())
                 return false;
-            
-            return encode_message ();
+
+            return encode_message();
         }
-        
-        private final boolean type_ready ()
+
+        private final boolean type_ready()
         {
             //  Read new message. If there is none, return false.
             //  The first frame of the persistence codec is message type
             //  if type == MESSAGE_ERROR then close connection
             //  if type == MESSAGE_RESPONSE then transfer them all
             //  if type == MESSAGE_FILE then transfer file channel
-            
+
             channel_ready = false;
-            if (!require_msg ())
+            if (!require_msg())
                 return false;
-            
-            type = in_progress.data () [0];
-            
-            next_step ((byte []) null, 0, status_ready, true);
+
+            type = in_progress.data()[0];
+
+            next_step((byte[]) null, 0, status_ready, true);
             return true;
         }
-        
-        private final boolean status_ready ()
+
+        private final boolean status_ready()
         {
-            if (!require_msg ())
+            if (!require_msg())
                 return false;
-            
-            status = in_progress.data () [0];
+
+            status = in_progress.data()[0];
             if (type == MESSAGE_FILE) {
-                process_file ();
-                
-                in_progress = new Msg (1);
-                in_progress.set_flags (Msg.more);
-                in_progress.put ((byte) status);
+                process_file();
+
+                in_progress = new Msg(1);
+                in_progress.set_flags(Msg.more);
+                in_progress.put((byte) status);
             }
-            
-            return encode_message ();
+
+            return encode_message();
         }
-        
-        private final boolean message_ready ()
+
+        private final boolean message_ready()
         {
             if (type == MESSAGE_ERROR) {
-                encoding_error ();
+                encoding_error();
                 return false;
             }
-                
+
             if (type == MESSAGE_FILE) {
-                return encode_file ();
-            } 
-            
-            if (!require_msg ())
+                return encode_file();
+            }
+
+            if (!require_msg())
                 return false;
 
-            return encode_message ();
+            return encode_message();
         }
 
-        private final void process_file () 
+        private final void process_file()
         {
             // The second file frame is path
-            boolean rc = require_msg ();
+            boolean rc = require_msg();
             assert (rc);
-            String path = new String (in_progress.data ());
+            String path = new String(in_progress.data());
 
             // The third file frame is position
-            rc = require_msg ();
+            rc = require_msg();
             assert (rc);
-            channel_position = in_progress.buf ().getLong ();
+            channel_position = in_progress.buf().getLong();
 
             // The fourth file frame is sending count
-            rc = require_msg ();
+            rc = require_msg();
             assert (rc);
-            channel_count = in_progress.buf ().getLong ();
+            channel_count = in_progress.buf().getLong();
 
             try {
-                channel = new FileInputStream(path).getChannel ();
+                channel = new FileInputStream(path).getChannel();
             } catch (IOException e) {
                 e.printStackTrace();
                 status = STATUS_INTERNAL_ERROR;
                 type = MESSAGE_ERROR;
             }
         }
-        
-        private final boolean encode_file () 
+
+        private final boolean encode_file()
         {
             channel_ready = true;
-            return encode_size ((int) channel_count, false);
+            return encode_size((int) channel_count, false);
         }
-        
-        private final boolean encode_message ()
+
+        private final boolean encode_message()
         {
             if (version == V1Protocol.VERSION) {
-                return v1_encode_message ();
+                return v1_encode_message();
             } else {
-                return v0_encode_message ();
+                return v0_encode_message();
             }
         }
 
-        private final boolean encode_size (int size, boolean more)
+        private final boolean encode_size(int size, boolean more)
         {
             if (version == V1Protocol.VERSION) {
-                return v1_encode_size (size, more);
+                return v1_encode_size(size, more);
             } else {
-                return v0_encode_size (size, more);
+                return v0_encode_size(size, more);
             }
         }
 
-        private boolean v1_encode_size (int size, boolean more)
+        private boolean v1_encode_size(int size, boolean more)
         {
             int protocol_flags = 0;
             if (more)
                 protocol_flags |= V1Protocol.MORE_FLAG;
             if (size > 255)
                 protocol_flags |= V1Protocol.LARGE_FLAG;
-            tmpbuf [0] = (byte) protocol_flags;
-            
+            tmpbuf[0] = (byte) protocol_flags;
+
             //  Encode the message length. For messages less then 256 bytes,
             //  the length is encoded as 8-bit unsigned integer. For larger
             //  messages, 64-bit unsigned integer in network byte order is used.
             if (size > 255) {
-                ByteBuffer b = ByteBuffer.wrap (tmpbuf);
-                b.position (1);
-                b.putLong (size);
-                next_step (tmpbuf, 9, size_ready, false);
-            }
-            else {
-                tmpbuf [1] = (byte) (size);
-                next_step (tmpbuf, 2, size_ready, false);
+                ByteBuffer b = ByteBuffer.wrap(tmpbuf);
+                b.position(1);
+                b.putLong(size);
+                next_step(tmpbuf, 9, size_ready, false);
+            } else {
+                tmpbuf[1] = (byte) (size);
+                next_step(tmpbuf, 2, size_ready, false);
             }
             return true;
         }
-        private boolean v1_encode_message ()
+
+        private boolean v1_encode_message()
         {
-            final int size = in_progress.size ();
-            
-            v1_encode_size (size, in_progress.has_more ());
+            final int size = in_progress.size();
+
+            v1_encode_size(size, in_progress.has_more());
             return true;
         }
-        
-        private boolean v0_encode_size (int size, boolean more)
+
+        private boolean v0_encode_size(int size, boolean more)
         {
             // Not implemented yet
-            encoding_error ();
+            encoding_error();
             return false;
         }
-        
-        private boolean v0_encode_message ()
+
+        private boolean v0_encode_message()
         {
             // Not implemented yet
-            encoding_error ();
+            encoding_error();
             return false;
         }
-        
-        private boolean require_msg () {
-            
-            in_progress = msg_source.pull_msg ();
+
+        private boolean require_msg()
+        {
+
+            in_progress = msg_source.pull_msg();
             if (in_progress == null) {
                 return false;
             }

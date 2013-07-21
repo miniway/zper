@@ -715,11 +715,14 @@ public class ZLog
                 if (pos < ch.size()) {
                     ch.truncate(pos);
                     flushed_size = size = pos;
+                    LOG.info("Segment " + path + " is Truncated at " + pos);
                 }
             } finally {
                 lock.release();
                 ch.close();
             }
+
+            LOG.info("Segment: " + path + " size: " + size);
         }
 
         protected void close()
