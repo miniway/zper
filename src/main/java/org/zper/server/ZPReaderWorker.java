@@ -103,7 +103,7 @@ public class ZPReaderWorker extends Thread
             msg = worker.base().recv(0);
             if (msg == null)
                 break;
-            more = msg.has_more();
+            more = msg.hasMore();
 
             switch (state) {
             case START:

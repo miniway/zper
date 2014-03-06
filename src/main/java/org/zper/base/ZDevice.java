@@ -97,7 +97,7 @@ public class ZDevice
                         sentAddress = true;
                     }
 
-                    more = msg.has_more();
+                    more = msg.hasMore();
 
                     success = backend_.send(msg, more ? ZMQ.ZMQ_SNDMORE : 0);
                     if (!success) {
@@ -128,7 +128,7 @@ public class ZDevice
                         continue;
                     }
 
-                    more = msg.has_more();
+                    more = msg.hasMore();
 
                     success = front_.send(msg, more ? ZMQ.ZMQ_SNDMORE : 0);
                     if (!success) {
@@ -219,7 +219,7 @@ public class ZDevice
                         sentAddress = true;
                     }
 
-                    more = msg.has_more();
+                    more = msg.hasMore();
 
                     success = backend_.send(msg, more ? ZMQ.ZMQ_SNDMORE : 0);
                     if (!success)
@@ -245,7 +245,7 @@ public class ZDevice
                         continue;
                     }
 
-                    more = msg.has_more();
+                    more = msg.hasMore();
 
                     success = front_.send(msg, more ? ZMQ.ZMQ_SNDMORE : 0);
 

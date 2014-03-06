@@ -261,7 +261,7 @@ public class Persistence
             buffer.position(read_pos - 1);
             int first = buffer.get();
             if ((first & V1Protocol.MORE_FLAG) > 0)
-                msg_flags |= Msg.more;
+                msg_flags |= Msg.MORE;
 
             if (first > 3) {
                 LOG.error("Invalid Flag " + first);
@@ -286,7 +286,7 @@ public class Persistence
                 return 0;
 
             Msg msg = new Msg(4);
-            msg.set_flags(Msg.more);
+            msg.setFlags(Msg.MORE);
             ByteBuffer.wrap(msg.data()).putInt(count);
 
             int rc = msg_sink.push_msg(msg);
@@ -333,7 +333,7 @@ public class Persistence
 
                 Msg msg = new Msg(msg_size);
                 assert (msg_flags == 0);
-                msg.set_flags(msg_flags);
+                msg.setFlags(msg_flags);
 
                 buffer.position(read_pos - msg_size);
                 buffer.get(msg.data());
@@ -434,7 +434,7 @@ public class Persistence
             if (channel_ready)
                 next_step(channel, channel_position, channel_count, type_ready, false);
             else {
-                boolean more = in_progress.has_more();
+                boolean more = in_progress.hasMore();
                 next_step(in_progress.data(), in_progress.size(),
                         more ? message_ready : type_ready, !more);
             }
@@ -480,7 +480,7 @@ public class Persistence
                 process_file();
 
                 in_progress = new Msg(1);
-                in_progress.set_flags(Msg.more);
+                in_progress.setFlags(Msg.MORE);
                 in_progress.put((byte) status);
             }
 
@@ -582,7 +582,7 @@ public class Persistence
         {
             final int size = in_progress.size();
 
-            v1_encode_size(size, in_progress.has_more());
+            v1_encode_size(size, in_progress.hasMore());
             return true;
         }
 

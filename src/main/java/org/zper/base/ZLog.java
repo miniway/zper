@@ -316,12 +316,12 @@ public class ZLog
         ByteBuffer header;
         if (size < 255) {
             header = ByteBuffer.allocate(2);
-            header.put((byte) ((flags & Msg.more) > 0 ? 0x01 : 0x00));
+            header.put((byte) ((flags & Msg.MORE) > 0 ? 0x01 : 0x00));
             header.put((byte) size);
         } else {
             header = ByteBuffer.allocate(9);
 
-            header.put((byte) ((flags & Msg.more) > 0 ? 0x03 : 0x02));
+            header.put((byte) ((flags & Msg.MORE) > 0 ? 0x03 : 0x02));
             header.putLong((long) size);
         }
         header.flip();

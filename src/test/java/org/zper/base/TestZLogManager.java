@@ -65,7 +65,7 @@ public class TestZLogManager
         assertThat(log.start(), is(0L));
         assertThat(log.offset(), is(0L));
 
-        long pos = log.append(new Msg("hello"));
+        long pos = log.append(new Msg("hello".getBytes()));
         assertThat(pos, is(7L));
         log.flush();
 
@@ -83,9 +83,9 @@ public class TestZLogManager
         assertThat(log.start(), is(0L));
         assertThat(log.offset(), is(0L));
 
-        log.append(new Msg("12345"));
+        log.append(new Msg("12345".getBytes()));
         assertThat(log.count(), is(1));
-        long pos = log.append(new Msg("1234567890"));
+        long pos = log.append(new Msg("1234567890".getBytes()));
         assertThat(log.count(), is(2));
         assertThat(pos, is(19L));
         assertThat(log.offset(), is(19L));
@@ -115,7 +115,7 @@ public class TestZLogManager
         ZLog log = m.get("new_topic");
         assertThat(log.offset(), is(20L));
 
-        log.append(new Msg("hello"));
+        log.append(new Msg("hello".getBytes()));
         assertThat(log.offset(), is(27L));
 
     }
@@ -127,9 +127,9 @@ public class TestZLogManager
         ZLogManager m = ZLogManager.instance();
         ZLog log = m.get("new_topic");
 
-        log.append(new Msg("12345678"));
-        log.append(new Msg("12345"));
-        log.append(new Msg("123"));
+        log.append(new Msg("12345678".getBytes()));
+        log.append(new Msg("12345".getBytes()));
+        log.append(new Msg("123".getBytes()));
         log.flush();
 
         long[] offsets = log.offsets();
@@ -149,9 +149,9 @@ public class TestZLogManager
         ZLogManager m = ZLogManager.instance();
         ZLog log = m.get("new_topic");
 
-        log.append(new Msg("12345678"));
-        log.append(new Msg("12345"));
-        log.append(new Msg("123"));
+        log.append(new Msg("12345678".getBytes()));
+        log.append(new Msg("12345".getBytes()));
+        log.append(new Msg("123".getBytes()));
         log.flush();
 
         FileChannel ch = log.open(10L);

@@ -63,11 +63,11 @@ public class TestZPReader
         sock.send(ByteBuffer.allocate(8).putLong(-2).array());
 
         Msg status = sock.base().recv(0);
-        assertTrue(status.has_more());
+        assertTrue(status.hasMore());
         assertEquals(100, status.data()[0]);
 
         Msg oldest = sock.base().recv(0);
-        assertFalse(oldest.has_more());
+        assertFalse(oldest.hasMore());
         assertEquals(infos[0].start(), oldest.buf().getLong());
 
         //  Latest offset
@@ -75,15 +75,15 @@ public class TestZPReader
         sock.send(ByteBuffer.allocate(8).putLong(-1).array());
 
         status = sock.base().recv(0);
-        assertTrue(status.has_more());
+        assertTrue(status.hasMore());
         assertEquals(100, status.data()[0]);
 
         Msg latest = sock.base().recv(0);
-        assertTrue(latest.has_more());
+        assertTrue(latest.hasMore());
         assertEquals(infos[infos.length - 1].start(), latest.buf().getLong());
 
         Msg last = sock.base().recv(0);
-        assertFalse(last.has_more());
+        assertFalse(last.hasMore());
         assertEquals(infos[infos.length - 1].offset(), last.buf().getLong());
 
         //  Modified before
@@ -91,7 +91,7 @@ public class TestZPReader
         sock.send(ByteBuffer.allocate(8).putLong(System.currentTimeMillis()).array());
 
         status = sock.base().recv(0);
-        assertTrue(status.has_more());
+        assertTrue(status.hasMore());
         assertEquals(100, status.data()[0]);
 
         List<Long> offsetList = new ArrayList<Long>();
@@ -99,7 +99,7 @@ public class TestZPReader
         while (true) {
             Msg msg = sock.base().recv(0);
             offsetList.add(msg.buf().getLong());
-            if (!msg.has_more())
+            if (!msg.hasMore())
                 break;
         }
         assertEquals(infos.length + 1, offsetList.size());

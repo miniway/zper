@@ -85,8 +85,8 @@ public class MsgIterator implements Iterator<Msg>
         int limit = buf.limit();
         buf.limit(buf.position() + length);
         Msg msg = new Msg(buf.slice());
-        if ((flag & Msg.more) > 0)
-            msg.set_flags(Msg.more);
+        if ((flag & Msg.MORE) > 0)
+            msg.setFlags(Msg.MORE);
 
         buf.limit(limit);
         buf.position(buf.position() + length);
