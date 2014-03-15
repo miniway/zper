@@ -27,6 +27,7 @@ package org.zper.server;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+import org.zeromq.ZFrame;
 import zmq.Msg;
 import org.zper.MsgIterator;
 import org.zper.ZPUtils;
@@ -48,19 +49,22 @@ public class ZPWriterWorker extends Thread
     private static final int START = 0;
     private static final int TOPIC = 1;
     private static final int COUNT = 2;
-    private static final int MESSAGE = 3;
+    private static final int SINGLE = 3;
+    private static final int MESSAGE = 4;
 
     private final ZContext context;
     private final String bindAddr;
     private final String identity;
     private final ZLogManager logMgr;
+    private final boolean decoder;
     private Socket worker;
 
-    public ZPWriterWorker(ZContext context, String bindAddr, String identity)
+    public ZPWriterWorker(ZContext context, String bindAddr, String identity, boolean decoder)
     {
         this.context = ZContext.shadow(context);
         this.bindAddr = bindAddr;
         this.identity = identity;
+        this.decoder = decoder;
 
         logMgr = ZLogManager.instance();
     }
@@ -132,9 +136,27 @@ public class ZPWriterWorker extends Thread
                 }
 
             case COUNT:
-                count = ByteBuffer.wrap(msg.data()).getInt();
-                state = MESSAGE;
 
+                if (decoder) {
+                    count = ByteBuffer.wrap(msg.data()).getInt();
+                    state = MESSAGE;
+                    break;
+                }
+                else {
+                    state = SINGLE;
+                }
+
+            case SINGLE:
+
+                if (store(zlog, msg)) {
+                    if (flag > 0 && zlog.flushed()) {
+                        response.add(new ZFrame(msg.buf().array()));
+                        response.send(worker);
+                    }
+                } else
+                    stop = true;
+                if (!more)
+                    state = START;
                 break;
 
             case MESSAGE:
@@ -173,4 +195,17 @@ public class ZPWriterWorker extends Thread
             return false;
         }
     }
+
+    private boolean store(ZLog zlog, Msg msg)
+    {
+        try {
+            zlog.append(msg);
+            return true;
+        } catch (IOException e) {
+            e.printStackTrace();
+            LOG.error("Failed to append msg", e);
+            return false;
+        }
+    }
+
 }

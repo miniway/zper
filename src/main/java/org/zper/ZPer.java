@@ -39,7 +39,7 @@ public class ZPer
 
     private Properties conf;
     private ZContext context;
-    private boolean destoryed = false;
+    volatile private boolean destoryed = false;
 
     public ZPer(Properties conf)
     {
@@ -56,9 +56,15 @@ public class ZPer
         ZPWriter writer = new ZPWriter(context, conf);
         ZPReader reader = new ZPReader(context, conf);
 
-        writer.start();
-        reader.start();
+        try {
+            writer.start();
+            reader.start();
+        } finally {
+            writer.shutdown();
+            reader.shutdown();
 
+            destoryed = true;
+        }
     }
 
     synchronized public void shutdown()

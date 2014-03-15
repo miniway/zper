@@ -54,7 +54,7 @@ public class MsgIterator implements Iterator<Msg>
         if (flag > 3)
             return false;
 
-        if ((flag & 0x02) == 0) {   //  Short length  
+        if ((flag & 0x02) == 0) {   //  Short length
             length = buf.get();
             if (length < 0)
                 length = (0xFF) & length;
@@ -70,8 +70,8 @@ public class MsgIterator implements Iterator<Msg>
             length = (int) longLength;
         }
 
-        if (length == 0 && flag == 0)
-            return false;
+        //if (length == 0 && flag == 0)
+        //    return false;
 
         if (length > buf.remaining())
             return false;

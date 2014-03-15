@@ -91,11 +91,15 @@ public class ZPReader extends Thread
         LOG.info("Reader bind on " + bind);
 
         ZDevice.loadBalanceDevice(router, inrouter, workers);
+    }
+
+    public void shutdown()
+    {
+        LOG.info("Reader front shutting down");
 
         ZLogManager.instance().shutdown();
 
         context.destroy();
-        LOG.info("Reader Front Ended");
+        LOG.info("Reader front ended");
     }
-
 }

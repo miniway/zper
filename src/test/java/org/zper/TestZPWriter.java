@@ -59,6 +59,7 @@ public class TestZPWriter
 
         // wait until flush
         Thread.sleep(1000);
+        zlog.flush();
 
         assertEquals(zlog.offset(), offset + data.length() + 2);
 
@@ -89,6 +90,7 @@ public class TestZPWriter
 
         // wait until flush
         Thread.sleep(1000);
+        zlog.flush();
 
         assertEquals(zlog.offset(), offset + data.length() + 2);
 

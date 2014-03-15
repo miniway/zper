@@ -17,6 +17,7 @@ public class Producer
         ctx = new ZContext();
         ctx.setLinger(-1);
         sock = ctx.createSocket(ZMQ.DEALER);
+        sock.setSndHWM(0);
         sock.setIdentity(ZPUtils.genTopicIdentity(topic, 0));
         for (String addr : props.getProperty("writer.list").split(",")) {
             sock.connect("tcp://" + addr);

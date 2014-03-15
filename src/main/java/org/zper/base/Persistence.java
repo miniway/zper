@@ -26,8 +26,11 @@ package org.zper.base;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 
 import org.slf4j.Logger;
@@ -50,6 +53,112 @@ public class Persistence
 
     public static final int STATUS_INTERNAL_ERROR = -1;
 
+    public static class BufferLike
+    {
+        private final ByteBuffer base;
+
+        private long position;
+        private long limit;
+        private long cursor;
+
+        private final int size;
+
+        public BufferLike(ByteBuffer base)
+        {
+            this.base = base;
+
+            size = base.capacity();
+            cursor = -size;
+            limit = 0;
+        }
+
+        public void written(int size)
+        {
+            limit += size;
+            cursor += size;
+        }
+
+        public long cursor()
+        {
+            return cursor;
+        }
+
+        public long remaining()
+        {
+            return limit - position;
+        }
+
+        public boolean hasRemaining()
+        {
+            return limit > position;
+        }
+
+        public int get()
+        {
+            int pos = (int) (position % size);
+            ByteBuffer buffer = base.duplicate();
+            buffer.limit(pos + 1);
+            buffer.position(pos);
+
+            position++;
+            return buffer.get();
+        }
+
+        public long getLong()
+        {
+            int pos = (int) (position % size);
+            ByteBuffer buffer = base.duplicate();
+            position += 8;
+
+            if (pos + 8 > size) {
+                buffer.limit(size);
+                buffer.position(pos);
+
+                ByteBuffer result = ByteBuffer.allocate(8);
+                result.put(buffer);
+
+                buffer.limit(8 - result.position());
+                buffer.position(0);
+                result.put(buffer);
+                result.flip();
+                return result.getLong();
+            }
+
+            buffer.position(pos + 8);
+            buffer.position(pos);
+
+            return buffer.getLong();
+        }
+
+        public void get(byte[] data)
+        {
+            int pos = (int) (position % size);
+            ByteBuffer buffer = base.duplicate();
+            buffer.position(pos);
+
+            position += data.length;
+
+            try {
+                buffer.get(data);
+            } catch (BufferUnderflowException e)
+            {
+                int remaining = buffer.remaining();
+                buffer.get(data, 0, remaining);
+                buffer.get(data, remaining, data.length - remaining);
+            }
+        }
+
+        public long position()
+        {
+            return position;
+        }
+
+        public void advance(int offset)
+        {
+            position += offset;
+        }
+    }
+
     public static class PersistDecoder extends DecoderBase
     {
         private static final int one_byte_size_ready = 0;
@@ -61,40 +170,39 @@ public class Persistence
         private final long maxmsgsize;
         private int msg_flags;
         private int msg_size;
-        private int read_pos;
         private final int version;
-        private ByteBuffer buffer;              //  Current operating buffer
+        private BufferLike buffer;              //  Current operating buffer
         private ByteBuffer active;              //  Active buffer
-        private ByteBuffer standby;             //  Standby buffer
-        private ByteBuffer threshold;
-        private ByteBuffer standby_threshold;
         private ByteBuffer dummy;               //  Dummy buffer
         private boolean identity_received;
         private final int bufsize;
-        private int start;
-        private int end;
+        private long start;
+        private long end;
         private int count;
+        private long total;
 
-        public PersistDecoder(int bufsize_, long maxmsgsize_, IMsgSink session, int version_)
+        private final AtomicLong threshold;
+
+        public PersistDecoder(int bufsize, long maxmsgsize, IMsgSink session, int version_)
         {
             super(0);
 
-            maxmsgsize = maxmsgsize_;
             version = version_;
             msg_sink = session;
             identity_received = false;
 
-            if (maxmsgsize_ < 0)
-                bufsize = bufsize_ * 10;
+            if (maxmsgsize < 0)
+                this.bufsize = bufsize << 6;
             else
-                bufsize = (int) maxmsgsize_;
+                this.bufsize = (int) maxmsgsize << 3;
 
-            active = ByteBuffer.allocateDirect(bufsize);
-            standby = ByteBuffer.allocateDirect(bufsize);
+            this.maxmsgsize = maxmsgsize;
+
+            active = ByteBuffer.allocateDirect(this.bufsize);
             dummy = ByteBuffer.allocate(0);
-            threshold = standby_threshold = null;
+            buffer = new BufferLike(active);
             start = end = count = 0;
-            read_pos = 0;
+            threshold = new AtomicLong(0);
             next_step(null, 1, flags_ready);
         }
 
@@ -132,44 +240,43 @@ public class Persistence
         @Override
         public ByteBuffer get_buffer()
         {
-            int remaining = buffer == null ? 0 : buffer.remaining();
-            if (active.remaining() < to_read) {
+            if (!active.hasRemaining()) {
 
-                if (threshold != null && threshold.hasRemaining()) {
-                    LockSupport.parkNanos(1);
+                long limit = threshold.get();
+                if (limit == buffer.cursor()) {
+                    LockSupport.parkNanos(100);
                     return dummy; // busy waiting
                 }
+                assert limit > buffer.cursor();
 
-                active.limit(active.position() + remaining);
-                active.position(end);
+                if (active.capacity() == active.position()) {
+                    active.position(0);
+                }
+                if (active.position() < (limit % bufsize))
+                    active.limit((int) (limit % bufsize));
 
-                start = end = 0;
-                standby.clear();
-                standby.put(active.slice());
-                standby.position(standby.position() - remaining);
-                ByteBuffer temp = active;
-                active = standby;
-                standby = temp;
-                threshold = standby_threshold;
+                else
+                    active.limit(active.capacity());
             }
-            buffer = active.slice();
-            buffer.position(remaining);
-            read_pos = 0;
-            return buffer;
+            return active.duplicate();
         }
 
         /**
-         * @param buf
+         * @param buf buffer that returned from get_buffer and flipped
          * @param size_ bytes that are received from socket
          * @return processed bytes. buf must advance as many as the returned value
          */
         @Override
         public int process_buffer(ByteBuffer buf, int size_)
         {
+            //if (!buf.hasRemaining()) // busy wait
+            //    return 0;
+
+            buffer.written(size_);
+
             //  Check if we had an error in previous attempt.
             if (state() < 0)
                 return -1;
-
 
             while (true) {
 
@@ -186,20 +293,17 @@ public class Persistence
                 }
 
                 //  If there are no more data in the buffer, return.
-                if (to_read > buf.remaining()) {
+                if (to_read > buffer.remaining()) {
 
-                    if (push_msg() != 0) {
-                        return buf.position(); // block
+                    if (push_msg() != 0) { // error
+                        return -1;
                     }
 
-                    active.position(active.position() + read_pos);
+                    active.position(active.position() + size_);
 
                     return size_;
                 }
 
-                //  Copy the data from buffer to the message.
-                read_pos += to_read;
-                buf.position(read_pos);
                 to_read = 0;
             }
         }
@@ -207,10 +311,10 @@ public class Persistence
         private boolean one_byte_size_ready()
         {
 
-            buffer.position(read_pos - 1);
             msg_size = buffer.get();
-            if (msg_size < 0)
+            if (msg_size < 0) {
                 msg_size = (0xff) & msg_size;
+            }
 
             //  Message size must not exceed the maximum allowed size.
             if (maxmsgsize >= 0)
@@ -229,16 +333,14 @@ public class Persistence
         {
             //  The payload size is encoded as 64-bit unsigned integer.
             //  The most significant byte comes first.
-            buffer.position(read_pos - 8);
             final long size = buffer.getLong();
 
             //  Message size must not exceed the maximum allowed size.
-            if (maxmsgsize >= 0)
-                if (msg_size > maxmsgsize) {
-                    LOG.error("Message size too large " + msg_size);
-                    decoding_error();
-                    return false;
-                }
+            if (maxmsgsize >= 0 && msg_size > maxmsgsize) {
+                LOG.error("Message size too large " + msg_size);
+                decoding_error();
+                return false;
+            }
 
             //  Message size must fit within range of size_t data type.
             if (msg_size > Integer.MAX_VALUE) {
@@ -258,7 +360,6 @@ public class Persistence
 
             //  Store the flags from the wire into the message structure.
             msg_flags = 0;
-            buffer.position(read_pos - 1);
             int first = buffer.get();
             if ((first & V1Protocol.MORE_FLAG) > 0)
                 msg_flags |= Msg.MORE;
@@ -293,35 +394,26 @@ public class Persistence
             if (rc != 0) {
                 if (rc != ZError.EAGAIN) {
                     decoding_error();
+                    return rc;
                 }
-
-                return rc;
+                return 0;
             }
 
-            int pos = active.position();
-            active.position(start);
-            active.limit(end);
-
-            msg = new Msg(active.slice());
-
-            active.limit(bufsize);
-            active.position(pos);
-
+            msg = new SharedMsg(threshold, active, start, end, count);
 
             rc = msg_sink.push_msg(msg);
-            while (rc != 0) {
+            if (rc != 0) {
 
                 if (rc != ZError.EAGAIN) {
                     decoding_error();
                     return rc;
                 }
 
-                rc = msg_sink.push_msg(msg);
+                assert (false);
             }
 
             start = end;
             count = 0;
-            standby_threshold = msg.buf();
             return 0;
         }
 
@@ -335,22 +427,23 @@ public class Persistence
                 assert (msg_flags == 0);
                 msg.setFlags(msg_flags);
 
-                buffer.position(read_pos - msg_size);
                 buffer.get(msg.data());
                 int rc = msg_sink.push_msg(msg);
                 if (rc != 0) {
                     if (rc != ZError.EAGAIN)
                         decoding_error();
 
-                    buffer.position(buffer.position() - msg_size);
+                    buffer.advance(msg_size);
                     return false;
                 }
                 identity_received = true;
-                start = buffer.position();
+                end = start = buffer.position();
             } else {
+                buffer.advance(msg_size);
                 if ((msg_flags & V1Protocol.MORE_FLAG) == 0) {
-                    end = active.position() + buffer.position();
+                    end = buffer.position();
                     count++;
+                    total++;
                 }
             }
             next_step(null, 1, flags_ready);
@@ -361,10 +454,10 @@ public class Persistence
         @Override
         public boolean stalled()
         {
-            if (!buffer.hasRemaining())
+            if (!buffer.hasRemaining() && count == 0)
                 return false;
 
-            return super.stalled();
+            return true;
         }
     }
 

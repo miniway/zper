@@ -21,7 +21,7 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
 * Handle fetch requests
 * Handle operation requests
 
-### ZPAck (at 0.1.1)
+### ZPAck (at 1.0)
 * Listen on the PUB socket for public
 * Connected SUB will get last sucessfully synced offset and the first frame of the message
  * So try to use the first frame as a message id
@@ -29,13 +29,13 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
 * Listen on the inproc PULL socket for ack input from the ZPWriter
 * Keep basic stats
 
-### ZPRelay (at 0.1.1)
+### ZPRelay (at 1.0)
 * Listen on the ROUTER socket for public
 * ZPRelay poll the data file and send new messages to client
 * If the ZPER is restarted, ZPRelay starts to send messages from the topic's last offset.
 * Offers a seamless experience
 
-### ZPController (at 0.2)
+### ZPController (at 2.0)
 * When ZPER works as a cluster, ZPER coordinates through ZPController
 * Listen on the ROUTER socket 
 * ZPController connects each other and shares informaion
@@ -290,7 +290,7 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
     ctx.term ();
 ```
 
-## Listen acks from ZPER (at 0.1.1)
+## Listen acks from ZPER (at 2.0)
 * Create a SUB socket
 * Set subscribe topics which you want to subscribe
 * Connect to ZPAck
@@ -307,5 +307,5 @@ Inspired by Apache [Kafka](http://incubator.apache.org/kafka/)
      + -----------+
 </pre>
 
-## Working on Cluster (at 0.2)
+## Working on Cluster (at 2.0)
 * By connecting to one of ZPController, client can get node and peer information

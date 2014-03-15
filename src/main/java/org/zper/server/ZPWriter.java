@@ -43,11 +43,13 @@ public class ZPWriter extends Thread
     static final Logger LOG = LoggerFactory.getLogger(ZPWriter.class);
 
     private final ZContext context;
+    private final boolean decoder;
     private final int numWorkers;
     private final String bind;
     private final List<byte[]> workers;
 
     // socket parameter
+    private final int recvHWM;
     private final int recvBufferSize;
     private final long maxMessageSize;
 
@@ -57,9 +59,11 @@ public class ZPWriter extends Thread
 
         numWorkers = Integer.parseInt(conf.getProperty("writer.workers", "5"));
         bind = conf.getProperty("writer.bind", "tcp://*:5555");
+        decoder = Boolean.parseBoolean(conf.getProperty("decoder", "true"));
+        recvHWM = Integer.parseInt(conf.getProperty("receive_hwm", "1024"));
 
         recvBufferSize = Integer.parseInt(conf.getProperty("receive_buffer", "1048576"));
-        maxMessageSize = Long.parseLong(conf.getProperty("max_message", "10485760"));
+        maxMessageSize = Long.parseLong(conf.getProperty("max_message", "8388608")); // 8M
 
         ZLogConfig zc = ZLogManager.instance().config();
         zc.set("base_dir", conf.getProperty("base_dir"));
@@ -81,32 +85,38 @@ public class ZPWriter extends Thread
 
         Socket router = context.createSocket(ZMQ.ROUTER);
         Socket inrouter = context.createSocket(ZMQ.ROUTER);
+        router.setRcvHWM(recvHWM);
+        router.setRouterMandatory(true);
         router.setReceiveBufferSize(recvBufferSize);
         router.setMaxMsgSize(maxMessageSize);
+        inrouter.setRouterMandatory(true);
 
-        router.setDecoder(PersistDecoder.class);
+        if (decoder)
+            router.setDecoder(PersistDecoder.class);
         inrouter.setRouterMandatory(true);
 
         inrouter.bind(workerBind);
 
         for (int i = 0; i < numWorkers; i++) {
             String id = String.valueOf(i);
-            ZPWriterWorker worker = new ZPWriterWorker(context, workerBind, id);
+            ZPWriterWorker worker = new ZPWriterWorker(context, workerBind, id, decoder);
             worker.start();
             workers.add(id.getBytes());
         }
 
         router.bind(bind);
 
-        LOG.info("Front Server Started on " + bind);
-
+        LOG.info("Writer Bind on " + bind);
         ZDevice.addressDevice(router, inrouter, workers);
+    }
 
-        LOG.info("Front Ended");
+    public void shutdown() {
+        LOG.info("Writer front shutting down");
+
         ZLogManager.instance().shutdown();
 
         context.destroy();
-
+        LOG.info("Writer front ended");
     }
 
 }
