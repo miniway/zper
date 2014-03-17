@@ -164,8 +164,8 @@ public class ZPUtils
             return 2 + size;
     }
 
-    public static MsgIterator iterator(Msg msg)
+    public static MsgIterator iterator(Msg msg, boolean allowEmtpy)
     {
-        return new MsgIterator(msg.buf());
+        return new MsgIterator(msg.buf(), allowEmtpy);
     }
 }

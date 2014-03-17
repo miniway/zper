@@ -31,14 +31,22 @@ import zmq.Msg;
 
 public class MsgIterator implements Iterator<Msg>
 {
-    private ByteBuffer buf;
+    private final ByteBuffer buf;
+    private final boolean allowEmpty;
+
     private int length;
     private int flag;
     private int valid;
 
     public MsgIterator(ByteBuffer buf)
     {
+        this(buf, true);
+    }
+
+    public MsgIterator(ByteBuffer buf, boolean allowEmpty)
+    {
         this.buf = buf;
+        this.allowEmpty = allowEmpty;
         valid = 0;
     }
 
@@ -70,8 +78,8 @@ public class MsgIterator implements Iterator<Msg>
             length = (int) longLength;
         }
 
-        //if (length == 0 && flag == 0)
-        //    return false;
+        if (!allowEmpty && length == 0 && flag == 0)
+            return false;
 
         if (length > buf.remaining())
             return false;

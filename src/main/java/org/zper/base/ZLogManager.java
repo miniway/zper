@@ -44,6 +44,7 @@ public class ZLogManager {
         protected int retain_hours;
         protected File base_path;
         protected boolean recover;
+        protected boolean allow_empty_message;
         
         private ZLogConfig() {
             set("base_dir", System.getProperty("java.io.tmpdir") + "/zlogs");
@@ -52,6 +53,7 @@ public class ZLogManager {
             set("flush_interval", 1000L) ; // 1 sec
             set("retain_hours", 168) ; // 1 week
             set("recover", false) ;
+            set("allow_empty_message", true) ;
         }
         
         public ZLogConfig set(String name, Object value) {

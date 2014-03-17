@@ -22,7 +22,7 @@ import org.junit.Test;
 public class TestZPReader
 {
     private static ZPer server;
-    private static String bind = "tcp://*:5556";
+    private static String bind = "tcp://*:6556";
     private static String topic = "test";
 
     @BeforeClass
@@ -30,6 +30,7 @@ public class TestZPReader
     {
 
         Properties conf = new Properties();
+        conf.setProperty("writer.bind", "tcp://*:6555");
         conf.setProperty("reader.bind", bind);
         conf.setProperty("base_dir", "/tmp/zlogs/");
 
@@ -56,7 +57,7 @@ public class TestZPReader
         sock.setIdentity(ZPUtils.genTopicIdentity(topic, 0));
         sock.setLinger(100);
 
-        sock.connect("tcp://127.0.0.1:5556");
+        sock.connect("tcp://127.0.0.1:6556");
 
         //  Earliest offset
         sock.sendMore("OFFSET");
@@ -125,7 +126,7 @@ public class TestZPReader
 
         sock.setIdentity(ZPUtils.genTopicIdentity(topic, 0));
 
-        sock.connect("tcp://127.0.0.1:5556");
+        sock.connect("tcp://127.0.0.1:6556");
 
         //  Latest offset
         sock.sendMore("FETCH");
@@ -138,7 +139,7 @@ public class TestZPReader
         Msg result = sock.base().recv(0);
         assertEquals((int) (last.offset() - last.start()), result.size());
 
-        Iterator<Msg> it = new MsgIterator(result.buf());
+        Iterator<Msg> it = new MsgIterator(result.buf(), false);
         while (it.hasNext()) {
             it.next();
         }

@@ -98,6 +98,7 @@ public class TestZLogManager
     {
         ZLogManager m = ZLogManager.instance();
         m.config().set("recover", true);
+        m.config().set("allow_empty_message", false);
 
         String path = datadir + "/new_topic/00000000000000000000.dat";
         FileChannel ch = new RandomAccessFile(path, "rw").getChannel();

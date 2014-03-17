@@ -353,7 +353,7 @@ public class ZLog
         buf = entry.getValue().getBuffer(false);
         buf.position((int) (start - entry.getKey()));
 
-        MsgIterator it = new MsgIterator(buf);
+        MsgIterator it = new MsgIterator(buf, conf.allow_empty_message);
 
         while (it.hasNext()) {
             msg = it.next();
@@ -383,7 +383,7 @@ public class ZLog
         buf = entry.getValue().getBuffer(false);
         buf.position((int) (start - entry.getKey()));
 
-        MsgIterator it = new MsgIterator(buf);
+        MsgIterator it = new MsgIterator(buf, conf.allow_empty_message);
 
         while (it.hasNext()) {
             msg = it.next();
@@ -425,7 +425,7 @@ public class ZLog
     }
 
     /**
-     * @param start absolute file offset
+     * @param offset absolute file offset
      * @return SegmentInfo
      */
     public SegmentInfo segmentInfo(long offset)
@@ -485,7 +485,7 @@ public class ZLog
     private void recover()
     {
         try {
-            current.recover();
+            current.recover(conf.allow_empty_message);
             capacity = conf.segment_size - current.size();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -684,7 +684,7 @@ public class ZLog
         }
 
         @SuppressWarnings("resource")
-        protected void recover() throws IOException
+        protected void recover(boolean allowEmpty) throws IOException
         {
             FileChannel ch = new RandomAccessFile(path, "rw").getChannel();
             FileLock lock = null;
@@ -704,7 +704,7 @@ public class ZLog
             try {
                 MappedByteBuffer buf = ch.map(MapMode.READ_ONLY, 0, ch.size());
                 int pos = 0;
-                MsgIterator it = new MsgIterator(buf);
+                MsgIterator it = new MsgIterator(buf, allowEmpty);
                 while (it.hasNext()) {
                     Msg msg = it.next();
                     if (msg == null)

@@ -60,7 +60,7 @@ public class Consumer
             return result;
         }
 
-        MsgIterator it = ZPUtils.iterator(sock.base().recv(0));
+        MsgIterator it = ZPUtils.iterator(sock.base().recv(0), true);
 
         while (it.hasNext()) {
             Msg header = it.next();
