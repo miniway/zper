@@ -296,7 +296,7 @@ public class ZLog
         long size = msg.size() + header.capacity();
 
         capacity -= size;
-        if (capacity < 0) {
+        if (capacity < 0 && !msg.hasMore()) {
             rotate();
             capacity -= size;
         }

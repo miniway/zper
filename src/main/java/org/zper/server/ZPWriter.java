@@ -72,6 +72,7 @@ public class ZPWriter extends Thread
         zc.set("flush_interval", Long.parseLong(conf.getProperty("flush_interval", "10000")));
         zc.set("retain_hours", Integer.parseInt(conf.getProperty("retain_hours", "168")));
         zc.set("recover", true);
+        zc.set("allow_empty_message", Boolean.parseBoolean(conf.getProperty("allow_empty_message", "true")));
 
         LOG.info("Data is stored at " + zc.get("base_dir"));
 
