@@ -75,6 +75,7 @@ public class ZPWriter extends Thread
         zc.set("allow_empty_message", Boolean.parseBoolean(conf.getProperty("allow_empty_message", "true")));
 
         LOG.info("Data is stored at " + zc.get("base_dir"));
+        LOG.info("Using decoder " + decoder);
 
         workers = new ArrayList<byte[]>();
     }

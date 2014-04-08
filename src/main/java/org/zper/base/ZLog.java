@@ -305,7 +305,9 @@ public class ZLog
 
         current.writes(header, msg.buf());
 
-        tryFlush();
+        if (!msg.hasMore()) {
+            tryFlush();
+        }
         return current.offset();
     }
 
