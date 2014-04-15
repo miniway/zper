@@ -269,15 +269,14 @@ public class ZLog
         long size = msg.size();
 
         capacity -= size;
-        if (capacity < 0) {
-            rotate();
-            capacity -= size;
-        }
-
         pendingMessages = pendingMessages + count;
         current.write(msg.buf());
-
         tryFlush();
+
+        if (capacity < 0) {
+            rotate();
+        }
+
         return current.offset();
 
     }
@@ -296,18 +295,17 @@ public class ZLog
         long size = msg.size() + header.capacity();
 
         capacity -= size;
-        if (capacity < 0 && !msg.hasMore()) {
-            rotate();
-            capacity -= size;
-        }
-
-        pendingMessages++;
 
         current.writes(header, msg.buf());
 
         if (!msg.hasMore()) {
+            pendingMessages++;
             tryFlush();
+            if (capacity < 0) {
+                rotate();
+            }
         }
+
         return current.offset();
     }
 
