@@ -116,6 +116,9 @@ public class ZPWriterWorker extends Thread
                     break;
                 flag = id[1];
                 topic = ZPUtils.getTopic(id);
+                if (topic == null) {
+                    break;
+                }
                 state = TOPIC;
                 zlog = logMgr.get(topic);
 

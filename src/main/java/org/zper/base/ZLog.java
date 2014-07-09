@@ -494,7 +494,7 @@ public class ZLog
 
     private void cleanup()
     {
-        long expire = System.currentTimeMillis() - 3600L * conf.retain_hours;
+        long expire = System.currentTimeMillis() - 3600000L * conf.retain_hours;
 
         Iterator<Map.Entry<Long, Segment>> it = segments.entrySet().iterator();
         while (it.hasNext()) {
