@@ -103,6 +103,9 @@ public class ZPUtils
 
     public static String getTopic(byte[] identity)
     {
+        if (identity.length < 3) {
+            return null;
+        }
         int tsize = identity[2];
         if (tsize + 3 > identity.length) {
             return null;
