@@ -63,7 +63,7 @@
     <dependency>
       <groupId>org.zeromq</groupId>
       <artifactId>jeromq</artifactId>
-      <version>1.0.0-SNAPSHOT</version>
+      <version>0.3.5-SNAPSHOT</version>
     </dependency>
 
 

@@ -89,6 +89,7 @@ public class ZPWriter extends Thread
         Socket inrouter = context.createSocket(ZMQ.ROUTER);
         router.setRcvHWM(recvHWM);
         router.setRouterMandatory(true);
+        router.setRouterHandlover(true);
         router.setReceiveBufferSize(recvBufferSize);
         router.setMaxMsgSize(maxMessageSize);
         inrouter.setRouterMandatory(true);
