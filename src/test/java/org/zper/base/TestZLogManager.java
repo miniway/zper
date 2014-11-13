@@ -30,8 +30,6 @@ import zmq.Msg;
 import org.junit.Before;
 import org.junit.Test;
 
-import zmq.Utils;
-
 import static org.junit.Assert.*;
 import static org.hamcrest.CoreMatchers.*;
 
@@ -48,12 +46,26 @@ public class TestZLogManager
     private void reset(long size, long interval)
     {
         File f = new File(datadir, "new_topic");
-        Utils.delete(f);
+        delete(f);
         ZLogManager.instance().config()
                 .set("base_dir", datadir)
                 .set("segment_size", size)
                 .set("flush_interval", interval);
         ZLogManager.instance().get("new_topic").reset();
+    }
+
+    public static boolean delete(File path)
+    {
+        if (!path.exists()) {
+            return false;
+        }
+        boolean ret = true;
+        if (path.isDirectory()) {
+            for (File f : path.listFiles()) {
+                ret = ret && delete(f);
+            }
+        }
+        return ret && path.delete();
     }
 
     @Test

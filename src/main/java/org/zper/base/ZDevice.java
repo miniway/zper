@@ -51,8 +51,8 @@ public class ZDevice
         int size = identities.size();
         PollItem items[] = new PollItem[2];
 
-        if (front_.getsockopt(ZMQ.ZMQ_TYPE) != ZMQ.ZMQ_ROUTER ||
-                backend_.getsockopt(ZMQ.ZMQ_TYPE) != ZMQ.ZMQ_ROUTER) {
+        if (front_.getSocketOpt(ZMQ.ZMQ_TYPE) != ZMQ.ZMQ_ROUTER ||
+                backend_.getSocketOpt(ZMQ.ZMQ_TYPE) != ZMQ.ZMQ_ROUTER) {
             throw new IllegalArgumentException("Both router socket is required");
         }
 
@@ -171,8 +171,8 @@ public class ZDevice
         int available = size;
         PollItem items[] = new PollItem[2];
 
-        if (front_.getsockopt(ZMQ.ZMQ_TYPE) != ZMQ.ZMQ_ROUTER ||
-                backend_.getsockopt(ZMQ.ZMQ_TYPE) != ZMQ.ZMQ_ROUTER) {
+        if (front_.getSocketOpt(ZMQ.ZMQ_TYPE) != ZMQ.ZMQ_ROUTER ||
+                backend_.getSocketOpt(ZMQ.ZMQ_TYPE) != ZMQ.ZMQ_ROUTER) {
             throw new IllegalArgumentException("Both router socket is required");
         }
 

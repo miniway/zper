@@ -29,7 +29,6 @@ import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 
@@ -40,7 +39,6 @@ import zmq.EncoderBase;
 import zmq.IMsgSink;
 import zmq.IMsgSource;
 import zmq.Msg;
-import zmq.V1Protocol;
 import zmq.ZError;
 
 public class Persistence
@@ -50,6 +48,10 @@ public class Persistence
     public static final int MESSAGE_RESPONSE = 1;
     public static final int MESSAGE_FILE = 2;
     public static final int MESSAGE_ERROR = 3;
+
+    public static final int VERSION = 1;
+    public static final int MORE_FLAG = 1;
+    public static final int LARGE_FLAG = 2;
 
     public static final int STATUS_INTERNAL_ERROR = -1;
 
@@ -203,11 +205,11 @@ public class Persistence
             buffer = new BufferLike(active);
             start = end = count = 0;
             threshold = new AtomicLong(0);
-            next_step(null, 1, flags_ready);
+            nextStep(null, 1, flags_ready);
         }
 
         @Override
-        public void set_msg_sink(IMsgSink msg_sink)
+        public void setMsgSink(IMsgSink msg_sink)
         {
             this.msg_sink = msg_sink;
         }
@@ -215,7 +217,7 @@ public class Persistence
         @Override
         protected boolean next()
         {
-            if (version == V1Protocol.VERSION) {
+            if (version == VERSION) {
                 switch (state()) {
                 case one_byte_size_ready:
                     return one_byte_size_ready();
@@ -238,7 +240,7 @@ public class Persistence
          * @return ByteBuffer, socket read can fill the returned buffer at maximum to its limit
          */
         @Override
-        public ByteBuffer get_buffer()
+        public ByteBuffer getBuffer()
         {
             if (!active.hasRemaining()) {
 
@@ -267,7 +269,7 @@ public class Persistence
          * @return processed bytes. buf must advance as many as the returned value
          */
         @Override
-        public int process_buffer(ByteBuffer buf, int size_)
+        public int processBuffer(ByteBuffer buf, int size_)
         {
             //if (!buf.hasRemaining()) // busy wait
             //    return 0;
@@ -282,7 +284,7 @@ public class Persistence
 
                 //  Try to get more space in the message to fill in.
                 //  If none is available, return.
-                while (to_read == 0) {
+                while (toRead == 0) {
                     if (!next()) {
                         if (state() < 0) {
                             return -1;
@@ -293,9 +295,9 @@ public class Persistence
                 }
 
                 //  If there are no more data in the buffer, return.
-                if (to_read > buffer.remaining()) {
+                if (toRead > buffer.remaining()) {
 
-                    if (push_msg() != 0) { // error
+                    if (pushMsg() != 0) { // error
                         return -1;
                     }
 
@@ -304,7 +306,7 @@ public class Persistence
                     return size_;
                 }
 
-                to_read = 0;
+                toRead = 0;
             }
         }
 
@@ -320,11 +322,11 @@ public class Persistence
             if (maxmsgsize >= 0)
                 if (msg_size > maxmsgsize) {
                     LOG.error("Message size too large " + msg_size);
-                    decoding_error();
+                    decodingError();
                     return false;
                 }
 
-            next_step(null, msg_size, message_ready);
+            nextStep(null, msg_size, message_ready);
 
             return true;
         }
@@ -338,19 +340,19 @@ public class Persistence
             //  Message size must not exceed the maximum allowed size.
             if (maxmsgsize >= 0 && msg_size > maxmsgsize) {
                 LOG.error("Message size too large " + msg_size);
-                decoding_error();
+                decodingError();
                 return false;
             }
 
             //  Message size must fit within range of size_t data type.
             if (msg_size > Integer.MAX_VALUE) {
                 LOG.error("Message size too large " + msg_size);
-                decoding_error();
+                decodingError();
                 return false;
             }
 
             msg_size = (int) size;
-            next_step(null, msg_size, message_ready);
+            nextStep(null, msg_size, message_ready);
 
             return true;
         }
@@ -361,27 +363,27 @@ public class Persistence
             //  Store the flags from the wire into the message structure.
             msg_flags = 0;
             int first = buffer.get();
-            if ((first & V1Protocol.MORE_FLAG) > 0)
+            if ((first & MORE_FLAG) > 0)
                 msg_flags |= Msg.MORE;
 
             if (first > 3) {
                 LOG.error("Invalid Flag " + first);
-                decoding_error();
+                decodingError();
                 return false;
             }
 
             //  The payload length is either one or eight bytes,
             //  depending on whether the 'large' bit is set.
-            if ((first & V1Protocol.LARGE_FLAG) > 0)
-                next_step(null, 8, eight_byte_size_ready);
+            if ((first & LARGE_FLAG) > 0)
+                nextStep(null, 8, eight_byte_size_ready);
             else
-                next_step(null, 1, one_byte_size_ready);
+                nextStep(null, 1, one_byte_size_ready);
 
             return true;
 
         }
 
-        private int push_msg()
+        private int pushMsg()
         {
             if (count == 0)
                 return 0;
@@ -390,10 +392,10 @@ public class Persistence
             msg.setFlags(Msg.MORE);
             ByteBuffer.wrap(msg.data()).putInt(count);
 
-            int rc = msg_sink.push_msg(msg);
+            int rc = msg_sink.pushMsg(msg);
             if (rc != 0) {
                 if (rc != ZError.EAGAIN) {
-                    decoding_error();
+                    decodingError();
                     return rc;
                 }
                 return 0;
@@ -401,11 +403,11 @@ public class Persistence
 
             msg = new SharedMsg(threshold, active, start, end, count);
 
-            rc = msg_sink.push_msg(msg);
+            rc = msg_sink.pushMsg(msg);
             if (rc != 0) {
 
                 if (rc != ZError.EAGAIN) {
-                    decoding_error();
+                    decodingError();
                     return rc;
                 }
 
@@ -428,10 +430,10 @@ public class Persistence
                 msg.setFlags(msg_flags);
 
                 buffer.get(msg.data());
-                int rc = msg_sink.push_msg(msg);
+                int rc = msg_sink.pushMsg(msg);
                 if (rc != 0) {
                     if (rc != ZError.EAGAIN)
-                        decoding_error();
+                        decodingError();
 
                     buffer.advance(msg_size);
                     return false;
@@ -440,13 +442,13 @@ public class Persistence
                 end = start = buffer.position();
             } else {
                 buffer.advance(msg_size);
-                if ((msg_flags & V1Protocol.MORE_FLAG) == 0) {
+                if ((msg_flags & MORE_FLAG) == 0) {
                     end = buffer.position();
                     count++;
                     total++;
                 }
             }
-            next_step(null, 1, flags_ready);
+            nextStep(null, 1, flags_ready);
 
             return true;
         }
@@ -493,11 +495,11 @@ public class Persistence
             msg_source = session;
 
             //  Write 0 bytes to the batch and go to file_ready state.
-            next_step((byte[]) null, 0, identity_ready, true);
+            nextStep((byte[]) null, 0, identity_ready, true);
         }
 
         @Override
-        public void set_msg_source(IMsgSource msg_source_)
+        public void setMsgSource(IMsgSource msg_source_)
         {
             msg_source = msg_source_;
         }
@@ -525,10 +527,10 @@ public class Persistence
         {
             //  Write message body into the buffer.
             if (channel_ready)
-                next_step(channel, channel_position, channel_count, type_ready, false);
+                nextStep(channel, channel_position, channel_count, type_ready, false);
             else {
                 boolean more = in_progress.hasMore();
-                next_step(in_progress.data(), in_progress.size(),
+                nextStep(in_progress.data(), in_progress.size(),
                         more ? message_ready : type_ready, !more);
             }
             return true;
@@ -559,7 +561,7 @@ public class Persistence
 
             type = in_progress.data()[0];
 
-            next_step((byte[]) null, 0, status_ready, true);
+            nextStep((byte[]) null, 0, status_ready, true);
             return true;
         }
 
@@ -583,7 +585,7 @@ public class Persistence
         private final boolean message_ready()
         {
             if (type == MESSAGE_ERROR) {
-                encoding_error();
+                encodingError();
                 return false;
             }
 
@@ -631,7 +633,7 @@ public class Persistence
 
         private final boolean encode_message()
         {
-            if (version == V1Protocol.VERSION) {
+            if (version == VERSION) {
                 return v1_encode_message();
             } else {
                 return v0_encode_message();
@@ -640,7 +642,7 @@ public class Persistence
 
         private final boolean encode_size(int size, boolean more)
         {
-            if (version == V1Protocol.VERSION) {
+            if (version == VERSION) {
                 return v1_encode_size(size, more);
             } else {
                 return v0_encode_size(size, more);
@@ -651,9 +653,9 @@ public class Persistence
         {
             int protocol_flags = 0;
             if (more)
-                protocol_flags |= V1Protocol.MORE_FLAG;
+                protocol_flags |= MORE_FLAG;
             if (size > 255)
-                protocol_flags |= V1Protocol.LARGE_FLAG;
+                protocol_flags |= LARGE_FLAG;
             tmpbuf[0] = (byte) protocol_flags;
 
             //  Encode the message length. For messages less then 256 bytes,
@@ -663,10 +665,10 @@ public class Persistence
                 ByteBuffer b = ByteBuffer.wrap(tmpbuf);
                 b.position(1);
                 b.putLong(size);
-                next_step(tmpbuf, 9, size_ready, false);
+                nextStep(tmpbuf, 9, size_ready, false);
             } else {
                 tmpbuf[1] = (byte) (size);
-                next_step(tmpbuf, 2, size_ready, false);
+                nextStep(tmpbuf, 2, size_ready, false);
             }
             return true;
         }
@@ -682,21 +684,21 @@ public class Persistence
         private boolean v0_encode_size(int size, boolean more)
         {
             // Not implemented yet
-            encoding_error();
+            encodingError();
             return false;
         }
 
         private boolean v0_encode_message()
         {
             // Not implemented yet
-            encoding_error();
+            encodingError();
             return false;
         }
 
         private boolean require_msg()
         {
 
-            in_progress = msg_source.pull_msg();
+            in_progress = msg_source.pullMsg();
             if (in_progress == null) {
                 return false;
             }
