@@ -136,7 +136,7 @@ public class TestZLogManager
     @Test
     public void testReadMsg() throws Exception
     {
-        reset(13L, 10000L);
+        reset(9L, 10000L);
         ZLogManager m = ZLogManager.instance();
         ZLog log = m.get("new_topic");
 
@@ -169,7 +169,7 @@ public class TestZLogManager
 
         FileChannel ch = log.open(10L);
         assertThat(log.offset(), is(22L));
-        assertThat(ch.size(), is(12L));
+        assertThat(ch.size(), is(17L));
         ch.close();
     }
 }
