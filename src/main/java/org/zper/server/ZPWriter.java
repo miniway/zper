@@ -107,9 +107,9 @@ public class ZPWriter extends Thread
             workers.add(id.getBytes());
         }
 
+        LOG.info("Writer Bind on " + bind);
         router.bind(bind);
 
-        LOG.info("Writer Bind on " + bind);
         ZDevice.addressDevice(router, inrouter, workers);
     }
 

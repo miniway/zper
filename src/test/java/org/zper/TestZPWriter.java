@@ -24,6 +24,7 @@ public class TestZPWriter
     {
         Properties conf = new Properties();
         conf.setProperty("writer.bind", bind);
+        conf.setProperty("reader.bind", "tcp://*:5558");
 
         conf.setProperty("base_dir", "/tmp/zlogs/");
 

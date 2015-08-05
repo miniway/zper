@@ -107,8 +107,13 @@ public class ZPUtils
             return null;
         }
         int tsize = identity[2];
-        if (tsize + 3 > identity.length) {
+        if (tsize + 3 > identity.length || tsize > 64) {
             return null;
+        }
+        for (int i = 3; i < tsize + 3; i++) {
+            if (!Character.isLetterOrDigit((int) identity[i])) {
+                return null;
+            }
         }
         return new String(identity, 3, tsize);
     }

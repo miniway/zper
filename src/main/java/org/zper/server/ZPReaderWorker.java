@@ -111,6 +111,8 @@ public class ZPReaderWorker extends Thread
                 if (id == null)
                     break;
                 topic = ZPUtils.getTopic(id);
+                if (topic == null)
+                    break;
                 state = TOPIC;
                 zlog = logMgr.get(topic);
 

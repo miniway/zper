@@ -28,7 +28,6 @@ public class TestZPReader
     @BeforeClass
     public static void start() throws Exception
     {
-
         Properties conf = new Properties();
         conf.setProperty("writer.bind", "tcp://*:6555");
         conf.setProperty("reader.bind", bind);

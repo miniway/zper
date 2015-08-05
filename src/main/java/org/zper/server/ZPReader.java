@@ -86,9 +86,8 @@ public class ZPReader extends Thread
             workers.add(id.getBytes());
         }
 
-        router.bind(bind);
-
         LOG.info("Reader bind on " + bind);
+        router.bind(bind);
 
         ZDevice.loadBalanceDevice(router, inrouter, workers);
     }

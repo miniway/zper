@@ -68,7 +68,7 @@ public class ZDevice
 
         while (success) {
             //  Wait while there are either requests or replies to process.
-            rc = ZMQ.zmq_poll(selector, items, -1);
+            rc = ZMQ.poll(selector, items, -1);
             if (rc < 0)
                 break;
 
@@ -193,7 +193,7 @@ public class ZDevice
             else
                 items[0].interestOps(ZMQ.ZMQ_POLLIN);
 
-            rc = ZMQ.zmq_poll(selector, items, -1);
+            rc = ZMQ.poll(selector, items, -1);
             if (rc < 0)
                 break;
 

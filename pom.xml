@@ -4,7 +4,7 @@
   <groupId>org.zper</groupId>
   <artifactId>zper</artifactId>
   <packaging>jar</packaging>
-  <version>0.2.1-SNAPSHOT</version>
+  <version>0.2.2-SNAPSHOT</version>
   <name>ZPER</name>
   <description>zeromq persistence broker</description>
   <url>https://github.com/miniway/zper</url>
@@ -63,7 +63,7 @@
     <dependency>
       <groupId>org.zeromq</groupId>
       <artifactId>jeromq</artifactId>
-      <version>0.3.5-SNAPSHOT</version>
+      <version>0.3.5</version>
     </dependency>
 
 
